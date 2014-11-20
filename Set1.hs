@@ -4,6 +4,7 @@ import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as BC8
 import Data.Bits
+import Data.Char
 
 
 -- challenge 1
@@ -40,5 +41,39 @@ testChallenge2 = hexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
 
 
 -- challenge 3
+
+hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
+
+-- we assume letter frequency analysis is feasible
+isEnglish :: String -> Bool
+isEnglish str =
+    let
+        len = toRational $ length str
+        spaceRatio = getRatio ' '
+        echoRatio = getRatio 'e'
+        alphaRatio = getRatio 'a'
+        getRatio x = toRational (length (filter (==x) str)) / len
+    in
+        spaceRatio > 0.09 && spaceRatio < 0.2 &&
+        echoRatio  > 0.06 && echoRatio  < 0.2 ||
+        alphaRatio > 0.05 && alphaRatio < 0.2
+
+repeatN 0 _ = []
+repeatN x xs = repeatN (x-1) xs ++ xs
+
+findXorKey :: String -> [(Bool,String,String)]
+findXorKey str =
+    let
+        hexChars = [ repeatN (len `div` 2) $ x:[y] | x <- asciiChars, y <- asciiChars ]
+        asciiChars = ['0'..'9'] ++ ['a'..'f']
+        len = length str
+    in filter (\(x,_,_) -> x) $
+            map (\key -> let str' = BC8.unpack $ hexXor str key
+                    in (isEnglish str', key, str')) hexChars
+
+testChallenge3 = findXorKey hexStr3 -- one of the result is in English
+
+
+
 
 
