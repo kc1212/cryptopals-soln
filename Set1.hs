@@ -30,7 +30,7 @@ testChallenge1 :: Bool
 testChallenge1 = hexToBase64 hexStr1 == base64Str1
 
 
--- challenge 2
+-- challenge 2 ----------------------------------------------------------------
 hexStr2a = "1c0111001f010100061a024b53535009181c"
 hexStr2b = "686974207468652062756c6c277320657965"
 hexStr2ans = "746865206b696420646f6e277420706c6179"
@@ -46,20 +46,20 @@ testChallenge2 = hexHexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
 -- result of xor should be "the kid don't play"
 
 
--- challenge 3
-
+-- challenge 3 ----------------------------------------------------------------
 hexStr3 :: String
 hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
 
 -- we assume letter frequency analysis is feasible
 -- TODO everything toLower?
-isEnglish :: String -> [String] -> Bool
-isEnglish str dict =
+isEnglish :: [String] -> String -> Bool
+isEnglish dict str =
     let
         wordList = words str
         threshold = (length wordList) `div` 2
+        isPrintAndAscii str = all (\c -> isPrint c && isAscii c) str
     in
-        length [ x | x <- wordList, elem x dict ] > threshold
+        length [ x | x <- wordList, elem x dict, isPrintAndAscii x ] > threshold
 
 getDictionary :: FilePath -> IO [String]
 getDictionary f = readFile f >>= \x -> return $ lines x
@@ -71,7 +71,7 @@ findXorKey dict str =
         len = length str
     in filter (\(x,_,_) -> x) $
             map (\key -> let str' = BC8.unpack $ hexByteXor str (BC8.pack $ replicate len key)
-                         in (isEnglish str' dict, key, str'))
+                         in (isEnglish dict str', key, str'))
                 keys
 
 testChallenge3 =
@@ -81,16 +81,15 @@ testChallenge3 =
 -- one of the result is in English, which is
 -- Cooking MC's like a pound of bacon
 
--- challenge 4
--- findXorKeysFromFile :: FilePath -> IO [(Bool,Char,String)]
--- findXorKeysFromFile f =
---     do
---         contentsRaw <- readFile f
---         return $ concatMap findXorKey (lines contentsRaw)
--- 
--- 
--- 
--- testChallenge4 = findXorKeysFromFile "4.txt"
+-- challenge 4 ----------------------------------------------------------------
+findXorKeysFromFile :: FilePath -> IO [(Bool,Char,String)]
+findXorKeysFromFile f =
+    do
+        contentsRaw <- readFile f
+        dict <- getDictionary "words.txt"
+        return $ concatMap (findXorKey dict) (lines contentsRaw)
+
+testChallenge4 = findXorKeysFromFile "4.txt"
 
 
 
