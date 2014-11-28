@@ -2,7 +2,7 @@
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
-import qualified Data.ByteString.Lazy.Char8 as BC8
+import qualified Data.ByteString.Lazy.Char8 as C8
 import Data.Char (chr, isAscii, isPrint, toLower)
 import Data.Bits
 
@@ -18,13 +18,13 @@ base64Str1 = "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t"
 
 decodeHexStr :: String -> B.ByteString
 decodeHexStr x =
-    let decodedStr = B16.decode $ BC8.pack x
-    in if BC8.null $ snd decodedStr
+    let decodedStr = B16.decode $ C8.pack x
+    in if C8.null $ snd decodedStr
         then fst decodedStr
         else error "decoding hex failed"
 
 hexToBase64 :: String -> String
-hexToBase64 x = BC8.unpack $ B64.encode $ decodeHexStr x
+hexToBase64 x = C8.unpack $ B64.encode $ decodeHexStr x
 
 testChallenge1 :: Bool
 testChallenge1 = hexToBase64 hexStr1 == base64Str1
@@ -56,10 +56,15 @@ isEnglish :: [String] -> String -> Bool
 isEnglish dict str =
     let
         wordList = words str
-        threshold = (length wordList) `div` 2
+        threshold = length wordList `div` 2
         isPrintAndAscii str = all (\c -> isPrint c && isAscii c) str
+        minWordCount = length str `div` 8
+        maxWordCount = length str `div` 3
+        wordCount = length [ x | x <- wordList, elem x dict, isPrintAndAscii x ]
     in
-        length [ x | x <- wordList, elem x dict, isPrintAndAscii x ] > threshold
+        wordCount > minWordCount
+        && wordCount > threshold
+        && wordCount < maxWordCount
 
 getDictionary :: FilePath -> IO [String]
 getDictionary f = readFile f >>= \x -> return $ lines x
@@ -69,8 +74,9 @@ findXorKey dict str =
     let
         keys = [chr x | x <- [20..126]]
         len = length str
-    in filter (\(x,_,_) -> x) $
-            map (\key -> let str' = BC8.unpack $ hexByteXor str (BC8.pack $ replicate len key)
+    in
+        filter (\(x,_,_) -> x) $
+            map (\key -> let str' = C8.unpack $ hexByteXor str (C8.pack $ replicate len key)
                          in (isEnglish dict str', key, str'))
                 keys
 
@@ -78,8 +84,7 @@ testChallenge3 =
     do
         dict <- getDictionary "words.txt"
         return $ findXorKey dict hexStr3
--- one of the result is in English, which is
--- Cooking MC's like a pound of bacon
+-- result appears to be "Cooking MC's like a pound of bacon"
 
 -- challenge 4 ----------------------------------------------------------------
 findXorKeysFromFile :: FilePath -> IO [(Bool,Char,String)]
@@ -90,6 +95,24 @@ findXorKeysFromFile f =
         return $ concatMap (findXorKey dict) (lines contentsRaw)
 
 testChallenge4 = findXorKeysFromFile "4.txt"
+-- result appears to be "Now that the party is jumping\n"
+
+
+-- challenge 5 ----------------------------------------------------------------
+plainStr5 = "Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal"
+keyStr5 = "ICE"
+hexStr5 = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f"
+
+charXor :: Char -> Char -> Char
+charXor x y = toEnum $ xor (fromEnum x) (fromEnum y)
+
+repeatXor :: String -> String -> B.ByteString
+repeatXor str pattern =
+    C8.pack $ C8.zipWith charXor (C8.pack str) (C8.pack key)
+    where
+        key = take (length str) (cycle pattern)
+
+testChallenge5 = decodeHexStr hexStr5 == repeatXor plainStr5 keyStr5
 
 
 
