@@ -3,7 +3,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as BC8
-import Data.Char (chr, isAscii, isPrint)
+import Data.Char (chr, isAscii, isPrint, toLower)
 import Data.Bits
 
 
@@ -52,35 +52,45 @@ hexStr3 :: String
 hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
 
 -- we assume letter frequency analysis is feasible
-isEnglish :: String -> Bool
-isEnglish str =
+-- TODO everything toLower?
+isEnglish :: String -> [String] -> Bool
+isEnglish str dict =
     let
-        len = toRational $ length str
-        spaceRatio = getRatio ' '
-        echoRatio = getRatio 'e'
-        alphaRatio = getRatio 'a'
-        getRatio x = toRational (length (filter (==x) str)) / len
+        wordList = words str
+        threshold = (length wordList) `div` 2
     in
-        foldr (\x xs -> isAscii x && isPrint x && xs) True str &&
-        spaceRatio > 0.09 && spaceRatio < 0.2 &&
-        echoRatio  > 0.06 && echoRatio  < 0.2 ||
-        alphaRatio > 0.05 && alphaRatio < 0.2
+        length [ x | x <- wordList, elem x dict ] > threshold
 
-findXorKey :: String -> [(Bool,Char,String)]
-findXorKey str =
+getDictionary :: FilePath -> IO [String]
+getDictionary f = readFile f >>= \x -> return $ lines x
+
+findXorKey :: [String] -> String -> [(Bool,Char,String)]
+findXorKey dict str =
     let
         keys = [chr x | x <- [20..126]]
         len = length str
     in filter (\(x,_,_) -> x) $
             map (\key -> let str' = BC8.unpack $ hexByteXor str (BC8.pack $ replicate len key)
-                         in (isEnglish str', key, str'))
+                         in (isEnglish str' dict, key, str'))
                 keys
 
-testChallenge3 = findXorKey hexStr3
+testChallenge3 =
+    do
+        dict <- getDictionary "words.txt"
+        return $ findXorKey dict hexStr3
 -- one of the result is in English, which is
 -- Cooking MC's like a pound of bacon
 
 -- challenge 4
+-- findXorKeysFromFile :: FilePath -> IO [(Bool,Char,String)]
+-- findXorKeysFromFile f =
+--     do
+--         contentsRaw <- readFile f
+--         return $ concatMap findXorKey (lines contentsRaw)
+-- 
+-- 
+-- 
+-- testChallenge4 = findXorKeysFromFile "4.txt"
 
 
 
