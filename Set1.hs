@@ -4,6 +4,7 @@ import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as C8
 import Data.Char (chr, isAscii, isPrint, toLower)
+import Data.List (sort)
 import Data.Bits
 
 
@@ -50,7 +51,6 @@ testChallenge2 = hexHexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
 hexStr3 :: String
 hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
 
--- we assume letter frequency analysis is feasible
 -- TODO everything toLower?
 isEnglish :: [String] -> String -> Bool
 isEnglish dict str =
@@ -60,14 +60,28 @@ isEnglish dict str =
         isPrintAndAscii str = all (\c -> isPrint c && isAscii c) str
         minWordCount = length str `div` 8
         maxWordCount = length str `div` 3
-        wordCount = length [ x | x <- wordList, elem x dict, isPrintAndAscii x ]
+        wordCount = length [ x | x <- wordList, binSearch x dict, isPrintAndAscii x ]
     in
         wordCount > minWordCount
         && wordCount > threshold
         && wordCount < maxWordCount
 
+binSearch :: Ord a => a -> [a] -> Bool
+binSearch x xs
+    | length xs < 4 = elem x xs
+    | otherwise     = doBinSearch x xs
+
+doBinSearch :: Ord a => a -> [a] -> Bool
+doBinSearch x xs
+    | mid < x   = binSearch x (drop (half+1) xs)
+    | mid > x   = binSearch x (take half xs)
+    | otherwise = True
+    where
+        mid  = xs !! half
+        half = (length xs) `div` 2
+
 getDictionary :: FilePath -> IO [String]
-getDictionary f = readFile f >>= \x -> return $ lines x
+getDictionary f = readFile f >>= \x -> return $ sort $ lines x
 
 findXorKey :: [String] -> String -> [(Bool,Char,String)]
 findXorKey dict str =
