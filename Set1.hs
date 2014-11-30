@@ -67,18 +67,17 @@ isEnglish dict str =
         && wordCount < maxWordCount
 
 binSearch :: Ord a => a -> [a] -> Bool
-binSearch x xs
-    | length xs < 4 = elem x xs
-    | otherwise     = doBinSearch x xs
+binSearch x xs = doBinSearch x xs (0, length xs - 1)
 
-doBinSearch :: Ord a => a -> [a] -> Bool
-doBinSearch x xs
-    | mid < x   = binSearch x (drop (half+1) xs)
-    | mid > x   = binSearch x (take half xs)
-    | otherwise = True
+doBinSearch :: Ord a => a -> [a] -> (Int,Int) -> Bool
+doBinSearch x xs (min,max)
+    | min == max = if mid == x then True else False
+    | mid < x    = doBinSearch x xs (half+1, max)
+    | mid > x    = doBinSearch x xs (min,half)
+    | otherwise  = True
     where
         mid  = xs !! half
-        half = (length xs) `div` 2
+        half = (max + min) `div` 2
 
 getDictionary :: FilePath -> IO [String]
 getDictionary f = readFile f >>= \x -> return $ sort $ lines x
@@ -128,6 +127,6 @@ repeatXor str pattern =
 
 testChallenge5 = decodeHexStr hexStr5 == repeatXor plainStr5 keyStr5
 
-
+-- main = testChallenge4 >>= \x -> print x
 
 
