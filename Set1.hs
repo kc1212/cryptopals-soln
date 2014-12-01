@@ -6,6 +6,7 @@ import qualified Data.ByteString.Lazy.Char8 as C8
 import Data.Char (chr, isAscii, isPrint, toLower)
 import Data.List (sort)
 import Data.Bits
+import Data.Word (Word8)
 
 
 -- challenge 1
@@ -74,7 +75,8 @@ doBinSearch x xs (min,max)
     | min == max = if mid == x then True else False
     | mid < x    = doBinSearch x xs (half+1, max)
     | mid > x    = doBinSearch x xs (min,half)
-    | otherwise  = True
+    | mid == x   = True
+    | otherwise  = error "critical error!"
     where
         mid  = xs !! half
         half = (max + min) `div` 2
@@ -126,6 +128,20 @@ repeatXor str pattern =
         key = take (length str) (cycle pattern)
 
 testChallenge5 = decodeHexStr hexStr5 == repeatXor plainStr5 keyStr5
+
+
+-- challenge 6 ----------------------------------------------------------------
+plainStr6a = "this is a test"
+plainStr6b = "wokka wokka!!!"
+
+hammingDistByte :: Word8 -> Word8 -> Int
+hammingDistByte a b =
+    length $ filter (==True) [testBit a x /= testBit b x | x <- [0..7]]
+
+hammingDist :: B.ByteString -> B.ByteString -> Int
+hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
+
+testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 
 -- main = testChallenge4 >>= \x -> print x
 
