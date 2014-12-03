@@ -118,16 +118,15 @@ plainStr5 = "Burning 'em, if you ain't quick and nimble\nI go crazy when I hear 
 keyStr5 = "ICE"
 hexStr5 = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f"
 
-charXor :: Char -> Char -> Char
-charXor x y = toEnum $ xor (fromEnum x) (fromEnum y)
+repeatXor :: B.ByteString -> B.ByteString -> B.ByteString
+repeatXor content pattern =
+    B.pack $ B.zipWith xor content key
+    where key = B.take (B.length content) (B.cycle pattern)
 
-repeatXor :: String -> String -> B.ByteString
-repeatXor str pattern =
-    C8.pack $ C8.zipWith charXor (C8.pack str) (C8.pack key)
-    where
-        key = take (length str) (cycle pattern)
+repeatCharXor :: String -> String -> B.ByteString
+repeatCharXor str pattern = repeatXor (C8.pack str) (C8.pack pattern)
 
-testChallenge5 = decodeHexStr hexStr5 == repeatXor plainStr5 keyStr5
+testChallenge5 = decodeHexStr hexStr5 == repeatCharXor plainStr5 keyStr5
 
 
 -- challenge 6 ----------------------------------------------------------------
@@ -140,6 +139,8 @@ hammingDistByte a b =
 
 hammingDist :: B.ByteString -> B.ByteString -> Int
 hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
+
+-- findKeySizes :: B.ByteString -> [Int] -> [Int]
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 
