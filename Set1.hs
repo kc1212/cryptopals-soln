@@ -4,9 +4,10 @@ import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as C8
 import Data.Char (chr, isAscii, isPrint, toLower)
-import Data.List (sort)
+import Data.List (sort, sortBy)
 import Data.Bits
 import Data.Word (Word8)
+import Data.Int (Int64)
 
 
 -- challenge 1
@@ -140,9 +141,27 @@ hammingDistByte a b =
 hammingDist :: B.ByteString -> B.ByteString -> Int
 hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
 
--- findKeySizes :: B.ByteString -> [Int] -> [Int]
+hammingDistBetweenChunks :: Int -> B.ByteString -> Int
+hammingDistBetweenChunks sz content =
+    let
+        chunks = toChuncks (fromIntegral sz) content
+        pairChunks = zip chunks (tail chunks)
+    in
+        sum $ map (\(a,b) -> hammingDist a b) pairChunks
+
+smallestHammingDist :: [Int] -> B.ByteString -> [(Int,Int)]
+smallestHammingDist ns content =
+    take 3 $ sortBy (\(_,x) (_,y) -> compare x y) distances
+    where distances = zip ns (map ((flip hammingDistBetweenChunks) content) ns)
+
+toChuncks :: Int64 -> B.ByteString -> [B.ByteString]
+toChuncks n xs
+    | n <= 0 = error "n must be greater than zero"
+    | B.length xs == 0 = []
+    | otherwise = let (a, b) = B.splitAt n xs in [a] ++ toChuncks n b
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
+
 
 -- main = testChallenge4 >>= \x -> print x
 
