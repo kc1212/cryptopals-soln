@@ -144,15 +144,17 @@ hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
 hammingDistBetweenChunks :: Int -> B.ByteString -> Int
 hammingDistBetweenChunks sz content =
     let
-        chunks = toChuncks (fromIntegral sz) content
+        chunks = take 5 $ toChuncks (fromIntegral sz) content
         pairChunks = zip chunks (tail chunks)
     in
         sum $ map (\(a,b) -> hammingDist a b) pairChunks
 
-smallestHammingDist :: [Int] -> B.ByteString -> [(Int,Int)]
+smallestHammingDist :: (Ord a, Fractional a) => [Int] -> B.ByteString -> [(Int,a)]
 smallestHammingDist ns content =
-    take 3 $ sortBy (\(_,x) (_,y) -> compare x y) distances
-    where distances = zip ns (map ((flip hammingDistBetweenChunks) content) ns)
+    sortBy (\(_,x) (_,y) -> compare x y) distances
+    where
+        distances = zip ns (map avgHammingDist ns)
+        avgHammingDist x = fromIntegral (hammingDistBetweenChunks x content) / fromIntegral x
 
 toChuncks :: Int64 -> B.ByteString -> [B.ByteString]
 toChuncks n xs
@@ -160,9 +162,37 @@ toChuncks n xs
     | B.length xs == 0 = []
     | otherwise = let (a, b) = B.splitAt n xs in [a] ++ toChuncks n b
 
+rightOrError :: Either String b -> b
+rightOrError (Left a)  = error a
+rightOrError (Right a) = a
+
+base64ToByteString :: String -> B.ByteString
+base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
+
+isEnglishByFrequency :: String -> Bool
+isEnglishByFrequency str = all (\c -> isPrint c && isAscii c) str
+
+solveSingleBlock :: B.ByteString -> [(B.ByteString, String, Bool)]
+solveSingleBlock xs =
+    filter (\(_,_,x) -> x)
+        [ (key, res, isEnglishByFrequency res) | key <- keys, let res = C8.unpack (repeatXor xs key) ]
+    where keys = [ B.pack [x] | x <- [20..126] ]
+
+solveMultiBlocks :: [B.ByteString] -> [[(B.ByteString, String, Bool)]]
+solveMultiBlocks xss = map solveSingleBlock xss
+
+findTheKey f =
+    do
+        contentRaw <- readFile f
+        let content = base64ToByteString $ concat $ lines contentRaw
+        -- print $ smallestHammingDist [2..40] content
+        -- smallest hamming distance appears to have length of 2
+        let content' = B.transpose $ toChuncks 2 content
+        print $ solveMultiBlocks $ content'
+
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
+testChallenge6 = findTheKey "6.txt"
 
 
--- main = testChallenge4 >>= \x -> print x
 
 
