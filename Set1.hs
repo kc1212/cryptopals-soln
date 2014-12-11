@@ -3,11 +3,11 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as C8
-import Data.Char (chr, isAscii, isPrint, toLower)
 import Data.List (sort, sortBy)
-import Data.Bits
 import Data.Word (Word8)
 import Data.Int (Int64)
+import Data.Char
+import Data.Bits
 import Debug.Trace
 
 
@@ -189,16 +189,33 @@ rightOrError (Right b) = b
 base64ToByteString :: String -> B.ByteString
 base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
 
-solveSingleBlock :: B.ByteString -> [(Bool, B.ByteString, String)]
+-- could use this instead of dictionary search
+goodHistogram :: String -> Bool
+goodHistogram str =
+    let
+        len = fromIntegral $ length str
+        allAscii = all isAscii str
+        myIsPunctuation x = isPunctuation x && all (x /=) "#$^&*_+=-][}{@\\|/<>~\DEL"
+        spaceCheck = (fromIntegral $ length $ filter isSpace str) > (0.025 * len)
+        specialCheck = (fromIntegral $ length $ filter (\x -> isAlphaNum x || myIsPunctuation x || isSpace x) str) > (0.95 * len)
+    in
+        allAscii && spaceCheck && specialCheck
+
+solveSingleBlock :: B.ByteString -> [(Bool, Word8, String)]
 -- solveSingleBlock xs | trace (show xs) False = undefined
 solveSingleBlock xs =
     filter (\(x,_,_) -> x)
-        [ (isAllPrintAndAscii res, key, res) | key <- keys, let res = C8.unpack (repeatXor xs key) ]
+        [ (goodHistogram res, B.head key, res) | key <- keys, let res = C8.unpack (repeatXor xs key) ]
     where keys = [ C8.pack [y] | x <- [0..128], let y = chr x ]
 
-solveMultiBlocks :: [B.ByteString] -> [[(Bool, B.ByteString, String)]]
+solveMultiBlocks :: [B.ByteString] -> [[(Bool, Word8, String)]]
 solveMultiBlocks xss = map solveSingleBlock xss
 -- solveMultiBlocks xss = map (findXorKeyByte isAllPrintAndAscii) xss
+
+collateKeys :: [[(Bool, Word8, String)]] -> B.ByteString
+collateKeys xss
+    | all (\x -> 1 /= length x) xss = error "all the lists should have length of 1!"
+    | otherwise = B.pack $ map (\(_,x,_) -> x) (concat xss)
 
 findTheKey f =
     do
@@ -206,12 +223,41 @@ findTheKey f =
         let content  = base64ToByteString $ concat $ lines contentRaw
         let (dist,_) = head $ smallestHammingDist [2..40] content
         let contentT = B.transpose $ toChuncks (fromIntegral dist) content
-        print $ solveMultiBlocks $ contentT
+        -- print $ solveMultiBlocks $ contentT
+        let key = collateKeys $ solveMultiBlocks $ contentT
+        print $ "key is: " ++ C8.unpack key
+        print $ "message is: "
+        print $ C8.unpack $ repeatXor content key
         -- print $ length $ filter null $ solveMultiBlocks $ content'
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 testChallenge6 = findTheKey "6.txt"
 
+
+main =
+    do
+        putStrLn "challenge 1"
+        print testChallenge1
+
+        putStrLn "challenge 2"
+        print testChallenge2
+
+        putStrLn "challenge 3"
+        res3 <- testChallenge3
+        print res3
+
+        -- this takes some time to run...
+        -- putStrLn "challenge 4"
+        -- res4 <- testChallenge4
+        -- print res4
+
+        putStrLn "challenge 5"
+        print testChallenge5
+
+        putStrLn "challenge 6"
+        res6 <- testChallenge6
+
+        print "done"
 
 
 
