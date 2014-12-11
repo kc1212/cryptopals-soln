@@ -8,6 +8,7 @@ import Data.List (sort, sortBy)
 import Data.Bits
 import Data.Word (Word8)
 import Data.Int (Int64)
+import Debug.Trace
 
 
 -- challenge 1
@@ -38,11 +39,14 @@ hexStr2a = "1c0111001f010100061a024b53535009181c"
 hexStr2b = "686974207468652062756c6c277320657965"
 hexStr2ans = "746865206b696420646f6e277420706c6179"
 
+byteByteXor :: B.ByteString -> B.ByteString -> B.ByteString
+byteByteXor a b = B.pack $ B.zipWith xor a b
+
 hexByteXor :: String -> B.ByteString -> B.ByteString
-hexByteXor a b = B.pack $ B.zipWith xor (decodeHexStr a) b
+hexByteXor a b = byteByteXor (decodeHexStr a) b
 
 hexHexXor :: String -> String -> B.ByteString
-hexHexXor a b = hexByteXor a (decodeHexStr b)
+hexHexXor a b = byteByteXor (decodeHexStr a) (decodeHexStr b)
 
 testChallenge2 :: Bool
 testChallenge2 = hexHexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
@@ -53,16 +57,21 @@ testChallenge2 = hexHexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
 hexStr3 :: String
 hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
 
+isPrintAndAscii :: Char -> Bool
+isPrintAndAscii = \c -> isPrint c && isAscii c
+
+isAllPrintAndAscii :: String -> Bool
+isAllPrintAndAscii str = all isPrintAndAscii str
+
 -- TODO everything toLower?
 isEnglish :: [String] -> String -> Bool
 isEnglish dict str =
     let
         wordList = words str
         threshold = length wordList `div` 2
-        isPrintAndAscii str = all (\c -> isPrint c && isAscii c) str
         minWordCount = length str `div` 8
         maxWordCount = length str `div` 3
-        wordCount = length [ x | x <- wordList, binSearch x dict, isPrintAndAscii x ]
+        wordCount = length [ x | x <- wordList, binSearch x dict, isAllPrintAndAscii x ]
     in
         wordCount > minWordCount
         && wordCount > threshold
@@ -85,30 +94,34 @@ doBinSearch x xs (min,max)
 getDictionary :: FilePath -> IO [String]
 getDictionary f = readFile f >>= \x -> return $ sort $ lines x
 
-findXorKey :: [String] -> String -> [(Bool,Char,String)]
-findXorKey dict str =
+findXorKeyHex :: (String -> Bool) -> String -> [(Bool,B.ByteString,String)]
+findXorKeyHex testf str = findXorKeyByte testf $ decodeHexStr str
+
+findXorKeyByte :: (String -> Bool) -> B.ByteString -> [(Bool,B.ByteString,String)]
+findXorKeyByte testf str =
     let
-        keys = [chr x | x <- [20..126]]
-        len = length str
+        len = B.length str
+        keys = [ C8.pack $ replicate (fromIntegral len) y | x <- [0..127], let y = chr x, isPrintAndAscii y ]
     in
         filter (\(x,_,_) -> x) $
-            map (\key -> let str' = C8.unpack $ hexByteXor str (C8.pack $ replicate len key)
-                         in (isEnglish dict str', key, str'))
+            map (\k ->
+                    let str' = C8.unpack $ byteByteXor str k
+                    in (testf str', k, str'))
                 keys
 
 testChallenge3 =
     do
         dict <- getDictionary "words.txt"
-        return $ findXorKey dict hexStr3
+        return $ findXorKeyHex (isEnglish dict) hexStr3
 -- result appears to be "Cooking MC's like a pound of bacon"
 
 -- challenge 4 ----------------------------------------------------------------
-findXorKeysFromFile :: FilePath -> IO [(Bool,Char,String)]
+findXorKeysFromFile :: FilePath -> IO [(Bool,B.ByteString,String)]
 findXorKeysFromFile f =
     do
         contentsRaw <- readFile f
         dict <- getDictionary "words.txt"
-        return $ concatMap (findXorKey dict) (lines contentsRaw)
+        return $ concatMap (findXorKeyHex (isEnglish dict)) (lines contentsRaw)
 
 testChallenge4 = findXorKeysFromFile "4.txt"
 -- result appears to be "Now that the party is jumping\n"
@@ -120,6 +133,7 @@ keyStr5 = "ICE"
 hexStr5 = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f"
 
 repeatXor :: B.ByteString -> B.ByteString -> B.ByteString
+-- repeatXor content pattern | trace (show content ++ ", " ++ show (B.length content) ++ ", " ++ show pattern) False = undefined
 repeatXor content pattern =
     B.pack $ B.zipWith xor content key
     where key = B.take (B.length content) (B.cycle pattern)
@@ -141,54 +155,59 @@ hammingDistByte a b =
 hammingDist :: B.ByteString -> B.ByteString -> Int
 hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
 
-hammingDistBetweenChunks :: Int -> B.ByteString -> Int
+hammingDistBetweenChunks :: Fractional a => Int -> B.ByteString -> a
 hammingDistBetweenChunks sz content =
     let
-        chunks = take 5 $ toChuncks (fromIntegral sz) content
-        pairChunks = zip chunks (tail chunks)
+        chunks = toChuncks (fromIntegral sz) content
+        n = length chunks - 1
+        odds = [ x | x <- [0..n], odd x ]
+        evens = [ x | x <- [0..n], even x ]
+        pairChunks = zip (map (chunks !!) odds) (map (chunks !!) evens)
+        len = fromIntegral (length pairChunks)
     in
-        sum $ map (\(a,b) -> hammingDist a b) pairChunks
+        fromIntegral (sum $ map (\(a,b) -> hammingDist a b) pairChunks) / len
 
 smallestHammingDist :: (Ord a, Fractional a) => [Int] -> B.ByteString -> [(Int,a)]
 smallestHammingDist ns content =
     sortBy (\(_,x) (_,y) -> compare x y) distances
     where
         distances = zip ns (map avgHammingDist ns)
-        avgHammingDist x = fromIntegral (hammingDistBetweenChunks x content) / fromIntegral x
+        avgHammingDist x = hammingDistBetweenChunks x content / fromIntegral x
 
 toChuncks :: Int64 -> B.ByteString -> [B.ByteString]
 toChuncks n xs
     | n <= 0 = error "n must be greater than zero"
     | B.length xs == 0 = []
-    | otherwise = let (a, b) = B.splitAt n xs in [a] ++ toChuncks n b
+    | otherwise =
+        let (a, b) = B.splitAt n xs
+        in [a] ++ toChuncks n b
 
 rightOrError :: Either String b -> b
 rightOrError (Left a)  = error a
-rightOrError (Right a) = a
+rightOrError (Right b) = b
 
 base64ToByteString :: String -> B.ByteString
 base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
 
-isEnglishByFrequency :: String -> Bool
-isEnglishByFrequency str = all (\c -> isPrint c && isAscii c) str
-
-solveSingleBlock :: B.ByteString -> [(B.ByteString, String, Bool)]
+solveSingleBlock :: B.ByteString -> [(Bool, B.ByteString, String)]
+-- solveSingleBlock xs | trace (show xs) False = undefined
 solveSingleBlock xs =
-    filter (\(_,_,x) -> x)
-        [ (key, res, isEnglishByFrequency res) | key <- keys, let res = C8.unpack (repeatXor xs key) ]
-    where keys = [ B.pack [x] | x <- [20..126] ]
+    filter (\(x,_,_) -> x)
+        [ (isAllPrintAndAscii res, key, res) | key <- keys, let res = C8.unpack (repeatXor xs key) ]
+    where keys = [ C8.pack [y] | x <- [0..128], let y = chr x ]
 
-solveMultiBlocks :: [B.ByteString] -> [[(B.ByteString, String, Bool)]]
+solveMultiBlocks :: [B.ByteString] -> [[(Bool, B.ByteString, String)]]
 solveMultiBlocks xss = map solveSingleBlock xss
+-- solveMultiBlocks xss = map (findXorKeyByte isAllPrintAndAscii) xss
 
 findTheKey f =
     do
         contentRaw <- readFile f
-        let content = base64ToByteString $ concat $ lines contentRaw
-        -- print $ smallestHammingDist [2..40] content
-        -- smallest hamming distance appears to have length of 2
-        let content' = B.transpose $ toChuncks 2 content
-        print $ solveMultiBlocks $ content'
+        let content  = base64ToByteString $ concat $ lines contentRaw
+        let (dist,_) = head $ smallestHammingDist [2..40] content
+        let contentT = B.transpose $ toChuncks (fromIntegral dist) content
+        print $ solveMultiBlocks $ contentT
+        -- print $ length $ filter null $ solveMultiBlocks $ content'
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 testChallenge6 = findTheKey "6.txt"
