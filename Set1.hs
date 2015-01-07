@@ -1,14 +1,20 @@
 
 import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as NonLazyB
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
+import qualified Data.ByteString.Base64 as NonLazyB64
+import qualified Data.ByteString.Base16 as NonLazyB16
 import qualified Data.ByteString.Lazy.Char8 as C8
+import qualified Data.ByteString.Char8 as NonLazyC8
 import Data.List (sort, sortBy)
 import Data.Word (Word8)
 import Data.Int (Int64)
 import Data.Char
 import Data.Bits
+import Data.Byteable
 import Debug.Trace
+import Crypto.Cipher.AES
 
 
 -- challenge 1
@@ -189,6 +195,9 @@ rightOrError (Right b) = b
 base64ToByteString :: String -> B.ByteString
 base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
 
+base64ToNonLazyByteString :: String -> NonLazyB.ByteString
+base64ToNonLazyByteString str = rightOrError $ NonLazyB64.decode $ NonLazyC8.pack str
+
 -- could use this instead of dictionary search
 goodHistogram :: String -> Bool
 goodHistogram str =
@@ -232,6 +241,17 @@ findTheKey f =
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 testChallenge6 = findTheKey "6.txt"
+
+
+-- challenge 7 ----------------------------------------------------------------
+
+testChallenge7 = do
+    contentRaw <- readFile "7.txt"
+    let ct = base64ToNonLazyByteString $ concat $ lines contentRaw
+    let key = initAES $ NonLazyC8.pack "YELLOW SUBMARINE"
+    print " result is: "
+    print $ decryptECB key ct
+
 
 
 main =
