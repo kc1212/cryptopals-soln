@@ -233,7 +233,6 @@ findTheKey f = do
     let contentT = B.transpose $ toChuncks (fromIntegral dist) content
     -- print $ solveMultiBlocks $ contentT
     let key = collateKeys $ solveMultiBlocks $ contentT
-    print "challenge 6:"
     print $ "key is: " ++ C8.unpack key
     print $ "message is: "
     print $ C8.unpack $ repeatXor content key
@@ -249,7 +248,6 @@ testChallenge7 = do
     contentRaw <- readFile "7.txt"
     let ct = base64ToNonLazyByteString $ concat $ lines contentRaw
     let key = initAES $ NonLazyC8.pack "YELLOW SUBMARINE"
-    print "challenge 7:"
     print $ decryptECB key ct
 
 
@@ -265,7 +263,6 @@ testChallenge8 = do
     let cts = map decodeHexStr (lines contentRaw)
     let dists = map (\ct -> hammingDistAllComboInList $ toChuncks 16 ct) cts
     let minElem = head $ sort dists
-    print "challenge 8:"
     print $ (show $ elemIndex minElem dists) ++ "th element is ECB with hamming distance of " ++ (show minElem)
 
 
@@ -278,20 +275,27 @@ main =
         putStrLn "challenge 2"
         print testChallenge2
 
+        -- TODO this takes some time to run, need to optimize
         putStrLn "challenge 3"
         res3 <- testChallenge3
         print res3
 
-        -- this takes some time to run...
-        -- putStrLn "challenge 4"
-        -- res4 <- testChallenge4
-        -- print res4
+        -- TODO this takes some time to run, need to optimize
+        putStrLn "challenge 4"
+        res4 <- testChallenge4
+        print res4
 
         putStrLn "challenge 5"
         print testChallenge5
 
         putStrLn "challenge 6"
         res6 <- testChallenge6
+
+        putStrLn "challenge 7"
+        res6 <- testChallenge7
+
+        putStrLn "challenge 8"
+        res6 <- testChallenge8
 
         print "done"
 
