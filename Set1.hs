@@ -7,7 +7,7 @@ import qualified Data.ByteString.Base64 as NonLazyB64
 import qualified Data.ByteString.Base16 as NonLazyB16
 import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.ByteString.Char8 as NonLazyC8
-import Data.List (sort, sortBy)
+import Data.List (sort, sortBy, elemIndex)
 import Data.Word (Word8)
 import Data.Int (Int64)
 import Data.Char
@@ -226,18 +226,18 @@ collateKeys xss
     | all (\x -> 1 /= length x) xss = error "all the lists should have length of 1!"
     | otherwise = B.pack $ map (\(_,x,_) -> x) (concat xss)
 
-findTheKey f =
-    do
-        contentRaw <- readFile f
-        let content  = base64ToByteString $ concat $ lines contentRaw
-        let (dist,_) = head $ smallestHammingDist [2..40] content
-        let contentT = B.transpose $ toChuncks (fromIntegral dist) content
-        -- print $ solveMultiBlocks $ contentT
-        let key = collateKeys $ solveMultiBlocks $ contentT
-        print $ "key is: " ++ C8.unpack key
-        print $ "message is: "
-        print $ C8.unpack $ repeatXor content key
-        -- print $ length $ filter null $ solveMultiBlocks $ content'
+findTheKey f = do
+    contentRaw <- readFile f
+    let content  = base64ToByteString $ concat $ lines contentRaw
+    let (dist,_) = head $ smallestHammingDist [2..40] content
+    let contentT = B.transpose $ toChuncks (fromIntegral dist) content
+    -- print $ solveMultiBlocks $ contentT
+    let key = collateKeys $ solveMultiBlocks $ contentT
+    print "challenge 6:"
+    print $ "key is: " ++ C8.unpack key
+    print $ "message is: "
+    print $ C8.unpack $ repeatXor content key
+    -- print $ length $ filter null $ solveMultiBlocks $ content'
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
 testChallenge6 = findTheKey "6.txt"
@@ -249,8 +249,24 @@ testChallenge7 = do
     contentRaw <- readFile "7.txt"
     let ct = base64ToNonLazyByteString $ concat $ lines contentRaw
     let key = initAES $ NonLazyC8.pack "YELLOW SUBMARINE"
-    print " result is: "
+    print "challenge 7:"
     print $ decryptECB key ct
+
+
+-- challenge 8 ----------------------------------------------------------------
+
+hammingDistAllComboInList :: [B.ByteString] -> Int
+hammingDistAllComboInList xs =
+    sum $ map (\(x1, x2) -> hammingDist x1 x2) [ (x1,x2) | x1 <- xs, x2 <- xs ]
+
+-- AES block size is 16
+testChallenge8 = do
+    contentRaw <- readFile "8.txt"
+    let cts = map decodeHexStr (lines contentRaw)
+    let dists = map (\ct -> hammingDistAllComboInList $ toChuncks 16 ct) cts
+    let minElem = head $ sort dists
+    print "challenge 8:"
+    print $ (show $ elemIndex minElem dists) ++ "th element is ECB with hamming distance of " ++ (show minElem)
 
 
 
