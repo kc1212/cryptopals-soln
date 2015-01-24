@@ -1,12 +1,8 @@
 
 import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString as NonLazyB
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
-import qualified Data.ByteString.Base64 as NonLazyB64
-import qualified Data.ByteString.Base16 as NonLazyB16
 import qualified Data.ByteString.Lazy.Char8 as C8
-import qualified Data.ByteString.Char8 as NonLazyC8
 import Data.List (sort, sortBy, elemIndex)
 import Data.Word (Word8)
 import Data.Int (Int64)
@@ -69,19 +65,19 @@ isPrintAndAscii = \c -> isPrint c && isAscii c
 isAllPrintAndAscii :: String -> Bool
 isAllPrintAndAscii str = all isPrintAndAscii str
 
--- TODO everything toLower?
-isEnglish :: [String] -> String -> Bool
-isEnglish dict str =
-    let
-        wordList = words str
-        threshold = length wordList `div` 2
-        minWordCount = length str `div` 8
-        maxWordCount = length str `div` 3
-        wordCount = length [ x | x <- wordList, binSearch x dict, isAllPrintAndAscii x ]
-    in
-        wordCount > minWordCount
-        && wordCount > threshold
-        && wordCount < maxWordCount
+-- -- TODO everything toLower?
+-- isEnglish :: [String] -> String -> Bool
+-- isEnglish dict str =
+--     let
+--         wordList = words str
+--         threshold = length wordList `div` 2
+--         minWordCount = length str `div` 8
+--         maxWordCount = length str `div` 3
+--         wordCount = length [ x | x <- wordList, binSearch x dict, isAllPrintAndAscii x ]
+--     in
+--         wordCount > minWordCount
+--         && wordCount > threshold
+--         && wordCount < maxWordCount
 
 binSearch :: Ord a => a -> [a] -> Bool
 binSearch x xs = doBinSearch x xs (0, length xs - 1)
@@ -117,8 +113,7 @@ findXorKeyByte testf str =
 
 testChallenge3 =
     do
-        dict <- getDictionary "words.txt"
-        return $ findXorKeyHex (isEnglish dict) hexStr3
+        return $ findXorKeyHex goodHistogram hexStr3
 -- result appears to be "Cooking MC's like a pound of bacon"
 
 -- challenge 4 ----------------------------------------------------------------
@@ -127,7 +122,7 @@ findXorKeysFromFile f =
     do
         contentsRaw <- readFile f
         dict <- getDictionary "words.txt"
-        return $ concatMap (findXorKeyHex (isEnglish dict)) (lines contentsRaw)
+        return $ concatMap (findXorKeyHex goodHistogram) (lines contentsRaw)
 
 testChallenge4 = findXorKeysFromFile "4.txt"
 -- result appears to be "Now that the party is jumping\n"
@@ -195,9 +190,6 @@ rightOrError (Right b) = b
 base64ToByteString :: String -> B.ByteString
 base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
 
-base64ToNonLazyByteString :: String -> NonLazyB.ByteString
-base64ToNonLazyByteString str = rightOrError $ NonLazyB64.decode $ NonLazyC8.pack str
-
 -- could use this instead of dictionary search
 goodHistogram :: String -> Bool
 goodHistogram str =
@@ -246,8 +238,8 @@ testChallenge6 = findTheKey "6.txt"
 
 testChallenge7 = do
     contentRaw <- readFile "7.txt"
-    let ct = base64ToNonLazyByteString $ concat $ lines contentRaw
-    let key = initAES $ NonLazyC8.pack "YELLOW SUBMARINE"
+    let ct = B.toStrict $ base64ToByteString $ concat $ lines contentRaw
+    let key = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
     print $ decryptECB key ct
 
 
