@@ -1,4 +1,13 @@
 
+module Set1
+( decodeHexStr
+, hexToBase64
+, byteByteXor
+, hexByteXor
+, hexHexXor
+, toChunksN
+) where
+
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
@@ -78,23 +87,23 @@ isAllPrintAndAscii str = all isPrintAndAscii str
 --         wordCount > minWordCount
 --         && wordCount > threshold
 --         && wordCount < maxWordCount
-
-binSearch :: Ord a => a -> [a] -> Bool
-binSearch x xs = doBinSearch x xs (0, length xs - 1)
-
-doBinSearch :: Ord a => a -> [a] -> (Int,Int) -> Bool
-doBinSearch x xs (min,max)
-    | min == max = if mid == x then True else False
-    | mid < x    = doBinSearch x xs (half+1, max)
-    | mid > x    = doBinSearch x xs (min,half)
-    | mid == x   = True
-    | otherwise  = error "critical error!"
-    where
-        mid  = xs !! half
-        half = (max + min) `div` 2
-
-getDictionary :: FilePath -> IO [String]
-getDictionary f = readFile f >>= \x -> return $ sort $ lines x
+--
+-- binSearch :: Ord a => a -> [a] -> Bool
+-- binSearch x xs = doBinSearch x xs (0, length xs - 1)
+--
+-- doBinSearch :: Ord a => a -> [a] -> (Int,Int) -> Bool
+-- doBinSearch x xs (min,max)
+--     | min == max = if mid == x then True else False
+--     | mid < x    = doBinSearch x xs (half+1, max)
+--     | mid > x    = doBinSearch x xs (min,half)
+--     | mid == x   = True
+--     | otherwise  = error "critical error!"
+--     where
+--         mid  = xs !! half
+--         half = (max + min) `div` 2
+--
+-- getDictionary :: FilePath -> IO [String]
+-- getDictionary f = readFile f >>= \x -> return $ sort $ lines x
 
 findXorKeyHex :: (String -> Bool) -> String -> [(Bool,B.ByteString,String)]
 findXorKeyHex testf str = findXorKeyByte testf $ decodeHexStr str
@@ -111,9 +120,7 @@ findXorKeyByte testf str =
                     in (testf str', k, str'))
                 keys
 
-testChallenge3 =
-    do
-        return $ findXorKeyHex goodHistogram hexStr3
+testChallenge3 = findXorKeyHex goodHistogram hexStr3
 -- result appears to be "Cooking MC's like a pound of bacon"
 
 -- challenge 4 ----------------------------------------------------------------
@@ -121,7 +128,6 @@ findXorKeysFromFile :: FilePath -> IO [(Bool,B.ByteString,String)]
 findXorKeysFromFile f =
     do
         contentsRaw <- readFile f
-        dict <- getDictionary "words.txt"
         return $ concatMap (findXorKeyHex goodHistogram) (lines contentsRaw)
 
 testChallenge4 = findXorKeysFromFile "4.txt"
@@ -156,10 +162,11 @@ hammingDistByte a b =
 hammingDist :: B.ByteString -> B.ByteString -> Int
 hammingDist a b = sum $ zipWith hammingDistByte (B.unpack a) (B.unpack b)
 
+-- TODO we can simplify this, probably use scanl
 hammingDistBetweenChunks :: Fractional a => Int -> B.ByteString -> a
 hammingDistBetweenChunks sz content =
     let
-        chunks = toChuncks (fromIntegral sz) content
+        chunks = toChunksN (fromIntegral sz) content
         n = length chunks - 1
         odds = [ x | x <- [0..n], odd x ]
         evens = [ x | x <- [0..n], even x ]
@@ -175,13 +182,13 @@ smallestHammingDist ns content =
         distances = zip ns (map avgHammingDist ns)
         avgHammingDist x = hammingDistBetweenChunks x content / fromIntegral x
 
-toChuncks :: Int64 -> B.ByteString -> [B.ByteString]
-toChuncks n xs
+toChunksN :: Int64 -> B.ByteString -> [B.ByteString]
+toChunksN n xs
     | n <= 0 = error "n must be greater than zero"
     | B.length xs == 0 = []
     | otherwise =
         let (a, b) = B.splitAt n xs
-        in [a] ++ toChuncks n b
+        in [a] ++ toChunksN n b
 
 rightOrError :: Either String b -> b
 rightOrError (Left a)  = error a
@@ -222,7 +229,7 @@ findTheKey f = do
     contentRaw <- readFile f
     let content  = base64ToByteString $ concat $ lines contentRaw
     let (dist,_) = head $ smallestHammingDist [2..40] content
-    let contentT = B.transpose $ toChuncks (fromIntegral dist) content
+    let contentT = B.transpose $ toChunksN (fromIntegral dist) content
     -- print $ solveMultiBlocks $ contentT
     let key = collateKeys $ solveMultiBlocks $ contentT
     print $ "key is: " ++ C8.unpack key
@@ -253,7 +260,7 @@ hammingDistAllComboInList xs =
 testChallenge8 = do
     contentRaw <- readFile "8.txt"
     let cts = map decodeHexStr (lines contentRaw)
-    let dists = map (\ct -> hammingDistAllComboInList $ toChuncks 16 ct) cts
+    let dists = map (\ct -> hammingDistAllComboInList $ toChunksN 16 ct) cts
     let minElem = head $ sort dists
     print $ (show $ elemIndex minElem dists) ++ "th element is ECB with hamming distance of " ++ (show minElem)
 
@@ -269,8 +276,7 @@ main =
 
         -- TODO this takes some time to run, need to optimize
         putStrLn "challenge 3"
-        res3 <- testChallenge3
-        print res3
+        print  testChallenge3
 
         -- TODO this takes some time to run, need to optimize
         putStrLn "challenge 4"
