@@ -6,6 +6,7 @@ module Set1
 , hexByteXor
 , hexHexXor
 , toChunksN
+, base64ToByteString
 ) where
 
 import qualified Data.ByteString.Lazy as B

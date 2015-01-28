@@ -26,32 +26,51 @@ errBlockSize :: a
 errBlockSize = error "wrong AES block size"
 
 -- the to/from strict conversion is a bit annoying
-plainAES :: AES -> B.ByteString -> B.ByteString
-plainAES aes x
-    | B.length x == aesBlockSize = B.fromStrict $ encryptECB aes (B.toStrict x)
+plainAES :: Bool -> AES -> B.ByteString -> B.ByteString
+plainAES enc aes x
+    | B.length x == aesBlockSize = B.fromStrict $ f aes (B.toStrict x)
     | otherwise = errBlockSize
+    where f = if enc then encryptECB else decryptECB
 
 myEncryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myEncryptCBC aes iv pt
     | B.length iv == aesBlockSize =
-        B.concat $ tail $ scanl (\x y -> plainAES aes (byteByteXor x y)) iv ptChunks
+        B.concat $ tail $ scanl (\x y -> plainAES True aes (byteByteXor x y)) iv ptChunks
     | otherwise = errBlockSize
     where ptChunks = toChunksN 16 (pkcs7 aesBlockSize pt)
 
--- myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
--- myDecryptCBC aes iv ct
---     | B.length iv == aesBlockSize =
---         B.concat $ scanl (\x y -> byteByteXor x (plainAES aes y)) iv ctChunks
---     | otherwise = errBlockSize
---     where ctChunks = toChunksN 16 ct
+myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
+myDecryptCBC aes iv ct
+    | B.length iv == aesBlockSize =
+        B.concat $ map (\(x,y) -> byteByteXor y (plainAES False aes x)) ctPairs
+    | otherwise = errBlockSize
+    where
+        ctChunks = toChunksN 16 ct
+        ctPairs = zip ctChunks (iv : init ctChunks)
+
+testCBC :: B.ByteString
+testCBC =
+    let
+        x = C8.pack "testing CBC... randomly typing on the my t420 keyboard"
+        key = initAES $ B.toStrict $ pkcs7 16 $ C8.pack "hello!!!"
+        iv = C8.pack $ "0000000000000000"
+    in
+        myDecryptCBC key iv (myEncryptCBC key iv x)
 
 main = do
-    print "challenge 1:"
+    print "challenge 9:"
     let res1 = pkcs7 20 (C8.pack "YELLOW SUBMARINE")
     print $ res1
     print $ B.unpack res1
 
-    print "challenge 2:"
+    print "challenge 10:"
+    print $ testCBC
+    contentRaw2 <- readFile "10.txt"
+    let ct2 = base64ToByteString $ concat $ lines contentRaw2
+    let key2 = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
+    let iv2 = C8.pack $ "0000000000000000"
+    print $ myDecryptCBC key2 iv2 ct2
+
 
     print "done"
 
