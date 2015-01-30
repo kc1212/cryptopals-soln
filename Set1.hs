@@ -227,15 +227,14 @@ collateKeys xss
     | otherwise = B.pack $ map (\(_,x,_) -> x) (concat xss)
 
 findTheKey f = do
-    contentRaw <- readFile f
-    let content  = base64ToByteString $ concat $ lines contentRaw
+    content <- fmap (base64ToByteString . concat . lines) (readFile f)
     let (dist,_) = head $ smallestHammingDist [2..40] content
     let contentT = B.transpose $ toChunksN (fromIntegral dist) content
     -- print $ solveMultiBlocks $ contentT
     let key = collateKeys $ solveMultiBlocks $ contentT
     print $ "key is: " ++ C8.unpack key
     print $ "message is: "
-    print $ C8.unpack $ repeatXor content key
+    putStr $ C8.unpack $ repeatXor content key
     -- print $ length $ filter null $ solveMultiBlocks $ content'
 
 testChallenge6a = 37 == hammingDist (C8.pack plainStr6a) (C8.pack plainStr6b)
@@ -245,10 +244,9 @@ testChallenge6 = findTheKey "6.txt"
 -- challenge 7 ----------------------------------------------------------------
 
 testChallenge7 = do
-    contentRaw <- readFile "7.txt"
-    let ct = B.toStrict $ base64ToByteString $ concat $ lines contentRaw
+    ct <- fmap (B.toStrict . base64ToByteString . concat . lines) (readFile "7.txt")
     let key = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
-    print $ decryptECB key ct
+    putStr $ C8.unpack $ B.fromStrict $ decryptECB key ct
 
 
 -- challenge 8 ----------------------------------------------------------------
@@ -259,8 +257,7 @@ hammingDistAllComboInList xs =
 
 -- AES block size is 16
 testChallenge8 = do
-    contentRaw <- readFile "8.txt"
-    let cts = map decodeHexStr (lines contentRaw)
+    cts <- fmap (\x -> map decodeHexStr (lines x)) (readFile "8.txt")
     let dists = map (\ct -> hammingDistAllComboInList $ toChunksN 16 ct) cts
     let minElem = head $ sort dists
     print $ (show $ elemIndex minElem dists) ++ "th element is ECB with hamming distance of " ++ (show minElem)
@@ -291,10 +288,10 @@ main =
         res6 <- testChallenge6
 
         putStrLn "challenge 7"
-        res6 <- testChallenge7
+        res7 <- testChallenge7
 
         putStrLn "challenge 8"
-        res6 <- testChallenge8
+        res8 <- testChallenge8
 
         print "done"
 
