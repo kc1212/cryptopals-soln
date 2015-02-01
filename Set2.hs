@@ -5,8 +5,11 @@ module Set2
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import Control.Monad
 import Data.Int (Int64)
+import Data.Word (Word8)
 import Crypto.Cipher.AES
+import System.Random
 
 import Set1
 
@@ -25,24 +28,25 @@ aesBlockSize = 16 :: Int64
 errBlockSize :: a
 errBlockSize = error "wrong AES block size"
 
--- the to/from strict conversion is a bit annoying
-plainAES :: Bool -> AES -> B.ByteString -> B.ByteString
-plainAES enc aes x
-    | B.length x == aesBlockSize = B.fromStrict $ f aes (B.toStrict x)
-    | otherwise = errBlockSize
-    where f = if enc then encryptECB else decryptECB
+myEncryptECB :: AES -> B.ByteString -> B.ByteString
+myEncryptECB aes x =
+    B.fromStrict $ encryptECB aes (B.toStrict x)
+
+myDecryptECB :: AES -> B.ByteString -> B.ByteString
+myDecryptECB aes x =
+    B.fromStrict $ decryptECB aes (B.toStrict x)
 
 myEncryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myEncryptCBC aes iv pt
     | B.length iv == aesBlockSize =
-        B.concat $ tail $ scanl (\x y -> plainAES True aes (byteByteXor x y)) iv ptChunks
+        B.concat $ tail $ scanl (\x y -> myEncryptECB aes (byteByteXor x y)) iv ptChunks
     | otherwise = errBlockSize
     where ptChunks = toChunksN 16 (pkcs7 aesBlockSize pt)
 
 myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myDecryptCBC aes iv ct
     | B.length iv == aesBlockSize =
-        B.concat $ map (\(x,y) -> byteByteXor y (plainAES False aes x)) ctPairs
+        B.concat $ map (\(x,y) -> byteByteXor y (myDecryptECB aes x)) ctPairs
     | otherwise = errBlockSize
     where
         ctChunks = toChunksN 16 ct
@@ -57,6 +61,26 @@ testCBC =
     in
         myDecryptCBC key iv (myEncryptCBC key iv x)
 
+genBytes :: Int -> IO B.ByteString
+genBytes n = do
+    res <- replicateM n $ getStdRandom random
+    return $ B.pack res
+
+genKey :: IO AES
+genKey = genBytes 16 >>= return . initAES . B.toStrict
+
+encOracle :: B.ByteString -> IO B.ByteString
+encOracle pt = do
+    before  <- getStdRandom (randomR (5,10)) >>= genBytes
+    after   <- getStdRandom (randomR (5,10)) >>= genBytes
+    isCbc   <- getStdRandom random
+    iv      <- genBytes 16
+    key     <- genKey
+    let pt' = B.append before (B.append pt after)
+    return $ if isCbc then myEncryptCBC key iv pt'
+                    else myEncryptECB key pt'
+
+
 main = do
     print "challenge 9:"
     let res1 = pkcs7 20 (C8.pack "YELLOW SUBMARINE")
@@ -65,12 +89,12 @@ main = do
 
     print "challenge 10:"
     print $ testCBC
-    contentRaw2 <- readFile "10.txt"
-    let ct2 = base64ToByteString $ concat $ lines contentRaw2
+    ct2 <- fmap (base64ToByteString . concat . lines) (readFile "10.txt")
     let key2 = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
     let iv2 = C8.pack $ "0000000000000000"
-    print $ myDecryptCBC key2 iv2 ct2
+    putStr $ C8.unpack $ myDecryptCBC key2 iv2 ct2
 
+    print "challenge 11:"
 
     print "done"
 
