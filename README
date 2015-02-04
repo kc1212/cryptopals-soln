@@ -1,0 +1,6 @@
+wget http://www.stackage.org/lts/cabal.config
+cabal sandbox init
+cabal update
+cabal install random cipher-aes base64-bytestring base16-bytestring
+cabal repl
+

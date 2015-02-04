@@ -71,19 +71,14 @@ genBytes n = do
 genKey :: IO AES
 genKey = genBytes 16 >>= return . initAES . B.toStrict
 
-doEncOracle :: B.ByteString -> Bool -> IO B.ByteString
-doEncOracle pt isCbc = do
+encOracle :: B.ByteString -> Bool -> IO B.ByteString
+encOracle pt isCbc = do
     before  <- getStdRandom (randomR (5,10)) >>= genBytes
     after   <- getStdRandom (randomR (5,10)) >>= genBytes
-    -- isCbc   <- getStdRandom random
     iv      <- genBytes 16
     key     <- genKey
-    return $ encOracle key iv isCbc (pkcs7 16 $ B.append before (B.append pt after))
-
-encOracle :: AES -> B.ByteString -> Bool -> B.ByteString -> B.ByteString
-encOracle key iv isCbc pt | trace ("trace CBC?: " ++ show isCbc) False = undefined
-encOracle key iv isCbc pt =
-    if isCbc then myEncryptCBC key iv pt else myEncryptECB key pt
+    let ptx = pkcs7 16 $ B.append before (B.append pt after)
+    return $ if isCbc then myEncryptCBC key iv ptx else myEncryptECB key ptx
 
 byteStringHasRepeat :: B.ByteString -> Bool
 byteStringHasRepeat ct =
@@ -105,8 +100,8 @@ main = do
     putStr pt10
 
     print "challenge 11:"
-    isCbc   <- getStdRandom random
-    ct11 <- doEncOracle (C8.pack pt10) isCbc -- TODO need randomly generate plain text
+    isCbc <- getStdRandom random
+    ct11 <- encOracle (C8.pack pt10) isCbc -- TODO need randomly generate plain text
     print $ if isCbc /= (byteStringHasRepeat ct11)
                 then "prediciton correct!" else "prediction wrong..."
 
