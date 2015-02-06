@@ -5,6 +5,7 @@ module Set2
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import qualified Data.Map as Map
 import Control.Monad
 import Data.List
 import Data.Int (Int64)
@@ -71,12 +72,12 @@ genBytes n = do
 genKey :: IO AES
 genKey = genBytes 16 >>= return . initAES . B.toStrict
 
-encOracle :: B.ByteString -> Bool -> IO B.ByteString
-encOracle pt isCbc = do
+encOracle :: AES -> Bool -> B.ByteString -> IO B.ByteString
+encOracle key isCbc pt = do
     before  <- getStdRandom (randomR (5,10)) >>= genBytes
     after   <- getStdRandom (randomR (5,10)) >>= genBytes
     iv      <- genBytes 16
-    key     <- genKey
+    -- key     <- genKey
     let ptx = pkcs7 16 $ B.append before (B.append pt after)
     return $ if isCbc then myEncryptCBC key iv ptx else myEncryptECB key ptx
 
@@ -84,6 +85,37 @@ byteStringHasRepeat :: B.ByteString -> Bool
 byteStringHasRepeat ct =
     let cts = toChunksN 16 ct
     in any ((>= 2) . length) (group $ sort cts)
+
+findBlockSize :: AES -> B.ByteString -> Maybe Int
+findBlockSize key unkStr =
+    let myStr = map (\x -> C8.pack $ replicate x 'A') (filter even [1..64])
+        ress = map (\x -> myEncryptECB key (pkcs7 16 $ B.append x unkStr)) myStr
+    in elemIndex True $ map (\x -> let xs = toChunksN 16 x in xs !! 0 == xs !! 1) ress
+
+createOracleDict :: C8.ByteString -> AES -> Map.Map C8.ByteString C8.ByteString
+createOracleDict xs key =
+    Map.fromList $ map (\x -> (x, myEncryptECB key x)) (map (B.snoc xs) [0..255])
+
+doChallenge12 :: IO ()
+doChallenge12 = do
+    unkText <- fmap (base64ToByteString . concat . lines) (readFile "12.txt")
+    key <- genKey
+
+    putStr "block size: "
+    let blockSize = fmap (fromIntegral . (+1)) (findBlockSize key unkText)
+    putStrLn $ show $ blockSize
+
+    putStr "is ECB: " -- we use the oracle on to copies of the unknown text to detect ECB
+    let ecbCt = fmap (\x -> let unkPt = pkcs7 x unkText
+                                in myEncryptECB key (B.append unkPt unkPt))
+                  blockSize
+    putStrLn $ show $ fmap byteStringHasRepeat ecbCt
+
+    -- let res x =
+    --         let ctMap = fmap (\x -> createOracleDict (C8.replicate (x-1) 'A') key) blockSize
+    --         in  show x
+    -- in putStrLn $ res "todo..."
+
 
 main = do
     print "challenge 9:"
@@ -101,9 +133,12 @@ main = do
 
     print "challenge 11:"
     isCbc <- getStdRandom random
-    ct11 <- encOracle (C8.pack pt10) isCbc -- TODO need randomly generate plain text
+    ct11 <- genKey >>= \key -> encOracle key isCbc (C8.pack pt10) -- TODO need randomly generate plain text
     print $ if isCbc /= (byteStringHasRepeat ct11)
                 then "prediciton correct!" else "prediction wrong..."
+
+    print "challenge 12:"
+    doChallenge12
 
     print "done"
 
