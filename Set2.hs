@@ -105,10 +105,10 @@ doChallenge12 = do
     let blockSize = fmap (fromIntegral . (+1)) (findBlockSize key unkText)
     putStrLn $ show $ blockSize
 
-    putStr "is ECB: " -- we use the oracle on to copies of the unknown text to detect ECB
-    let ecbCt = fmap (\x -> let unkPt = pkcs7 x unkText
-                                in myEncryptECB key (B.append unkPt unkPt))
-                  blockSize
+    putStr "is ECB: "
+    let ecbCt = fmap
+                    (\x -> myEncryptECB key $ B.append (B.replicate 64 12) (pkcs7 x unkText))
+                    blockSize
     putStrLn $ show $ fmap byteStringHasRepeat ecbCt
 
     -- let res x =
