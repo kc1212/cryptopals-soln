@@ -18,10 +18,10 @@ import Set1
 
 -- feels like procedural programming..
 pkcs7 :: Int64 -> B.ByteString -> B.ByteString
-pkcs7 blockSize x =
+pkcs7 bs x =
     let
-        tmp = blockSize - mod (B.length x) blockSize
-        padCount = if tmp == 0 then blockSize else tmp
+        tmp = bs - mod (B.length x) bs
+        padCount = if tmp == 0 then bs else tmp
     in
         B.append x (B.replicate padCount (fromIntegral padCount))
 
@@ -92,9 +92,14 @@ findBlockSize key unkStr =
         ress = map (\x -> myEncryptECB key (pkcs7 16 $ B.append x unkStr)) myStr
     in elemIndex True $ map (\x -> let xs = toChunksN 16 x in xs !! 0 == xs !! 1) ress
 
+-- the key is cipher text, value is plain text
 createPtCtMap :: AES -> B.ByteString -> Map.Map B.ByteString B.ByteString
 createPtCtMap key xs =
-    Map.fromList $ map (\x -> (x, myEncryptECB key x)) (map (B.snoc xs) [0..255])
+    Map.fromList $ map (\x -> (myEncryptECB key x, x)) (map (B.snoc xs) [0..255])
+
+iDontLikeMaybe :: Maybe a -> a
+iDontLikeMaybe (Just a) = a
+iDontLikeMaybe Nothing = error "Nothing!"
 
 doChallenge12 :: IO ()
 doChallenge12 = do
@@ -102,20 +107,21 @@ doChallenge12 = do
     key <- genKey
 
     putStr "block size: "
-    let blockSize = fmap (fromIntegral . (+1)) (findBlockSize key unkText)
-    putStrLn $ show $ blockSize
+    let bs = iDontLikeMaybe $ fmap (fromIntegral . (+1)) (findBlockSize key unkText)
+    putStrLn $ show $ bs
 
-    let ecbOracle k pt = fmap (\x -> myEncryptECB k $ B.append pt (pkcs7 x unkText)) blockSize
+    let ecbOracle k pt = myEncryptECB k $ pkcs7 bs (B.append pt unkText)
 
     putStr "is ECB: "
-    putStrLn $ show $ fmap byteStringHasRepeat $ ecbOracle key (B.replicate 64 12)
+    putStrLn $ show $ byteStringHasRepeat $ ecbOracle key (B.replicate 64 12)
 
     let breakEcbSimple ctr pre =
-        let preMap = createPtCtMap key pre
-            solvedBlock = Map.lookup (B.head $ ecbOracle key pre) preMay
-        in if ctr == 0 then pre else breakEcbSimple (B.tail solvedBlock) (ctr-1)
+            let preMap = createPtCtMap key pre -- looks up value at a key
+                firstBlock = B.take bs (ecbOracle key (B.take ctr pre))
+                solvedBlock = iDontLikeMaybe $ Map.lookup firstBlock preMap
+            in if ctr == 0 then pre else breakEcbSimple (ctr-1) (B.tail solvedBlock)
 
-    putStrLn $ show $ fmap (\x -> breakEcbSimple x (B.replicate (x-1) 'A')) blockSize
+    putStrLn $ show $ breakEcbSimple bs (C8.replicate (bs-1) '-')
 
 
 main = do
