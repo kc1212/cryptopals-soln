@@ -92,8 +92,8 @@ findBlockSize key unkStr =
         ress = map (\x -> myEncryptECB key (pkcs7 16 $ B.append x unkStr)) myStr
     in elemIndex True $ map (\x -> let xs = toChunksN 16 x in xs !! 0 == xs !! 1) ress
 
-createOracleDict :: C8.ByteString -> AES -> Map.Map C8.ByteString C8.ByteString
-createOracleDict xs key =
+createPtCtMap :: AES -> B.ByteString -> Map.Map B.ByteString B.ByteString
+createPtCtMap key xs =
     Map.fromList $ map (\x -> (x, myEncryptECB key x)) (map (B.snoc xs) [0..255])
 
 doChallenge12 :: IO ()
@@ -105,16 +105,17 @@ doChallenge12 = do
     let blockSize = fmap (fromIntegral . (+1)) (findBlockSize key unkText)
     putStrLn $ show $ blockSize
 
-    putStr "is ECB: "
-    let ecbCt = fmap
-                    (\x -> myEncryptECB key $ B.append (B.replicate 64 12) (pkcs7 x unkText))
-                    blockSize
-    putStrLn $ show $ fmap byteStringHasRepeat ecbCt
+    let ecbOracle k pt = fmap (\x -> myEncryptECB k $ B.append pt (pkcs7 x unkText)) blockSize
 
-    -- let res x =
-    --         let ctMap = fmap (\x -> createOracleDict (C8.replicate (x-1) 'A') key) blockSize
-    --         in  show x
-    -- in putStrLn $ res "todo..."
+    putStr "is ECB: "
+    putStrLn $ show $ fmap byteStringHasRepeat $ ecbOracle key (B.replicate 64 12)
+
+    let breakEcbSimple ctr pre =
+        let preMap = createPtCtMap key pre
+            solvedBlock = Map.lookup (B.head $ ecbOracle key pre) preMay
+        in if ctr == 0 then pre else breakEcbSimple (B.tail solvedBlock) (ctr-1)
+
+    putStrLn $ show $ fmap (\x -> breakEcbSimple x (B.replicate (x-1) 'A')) blockSize
 
 
 main = do
