@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.Map as Map
 import Control.Monad
 import Data.List
+import Data.List.Split
 import Data.Int (Int64)
 import Data.Word (Word8)
 import Crypto.Cipher.AES
@@ -124,6 +125,42 @@ doChallenge12 = do
     putStrLn $ show $ breakEcbSimple bs (C8.replicate (bs-1) '-')
 
 
+type CookieObj = [(String,String)]
+
+decodeCookie :: String -> CookieObj
+decodeCookie inp =
+    let innerSplit x =
+            let xs = splitOn "=" x
+            in if length xs == 2 then (xs !! 0, xs !! 1) else error "parse error!"
+    in map innerSplit (splitOn "&" inp)
+
+profileFor :: String -> CookieObj
+profileFor inp =
+    [("email", delete '&' $ delete '=' inp), ("uid", "10"), ("role", "user")]
+
+encodeCookie :: CookieObj -> String
+encodeCookie obj =
+    init $ concatMap (\x -> (fst x) ++ '=':(snd x) ++ "&") obj
+
+doChallenge13 :: IO ()
+doChallenge13 = do
+    key <- genKey
+    let oracle = myEncryptECB key . pkcs7 16 . C8.pack
+    let profile1 = encodeCookie $ profileFor "fooz@barz.com"
+    -- email=fooz@barz.com&uid=10&role=user    user begins at 32, third
+    -- 0    5    10   15   20   25   30   35
+    let ct1s = toChunksN 16 $ oracle profile1
+
+    let profile2 = encodeCookie $ profileFor ("AAAAAAAAAAadmin" ++ replicate 12 '\f')
+    -- email=AAAAAAAAAAadmin----------&uid=10&role=user   admin begins at 16, second
+    -- 0    5    10   15   20   25   30   35
+    let ct2s = toChunksN 16 $ oracle profile2
+
+    -- now reconstruct a forged ct from the two previous ct
+    -- we have forged the admin role!
+    putStrLn $ show $ myDecryptECB key $ B.concat [ ct1s !! 0, ct1s !! 1, ct2s !! 1 ]
+
+
 main = do
     print "challenge 9:"
     let res9 = pkcs7 20 (C8.pack "YELLOW SUBMARINE")
@@ -146,6 +183,9 @@ main = do
 
     print "challenge 12:"
     doChallenge12
+
+    print "challenge 13:"
+    doChallenge13
 
     print "done"
 
