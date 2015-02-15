@@ -15,16 +15,8 @@ import Crypto.Cipher.AES
 import System.Random
 import Debug.Trace
 
+import Common
 import Set1
-
--- feels like procedural programming..
-pkcs7 :: Int64 -> B.ByteString -> B.ByteString
-pkcs7 bs x =
-    let
-        tmp = bs - mod (B.length x) bs
-        padCount = if tmp == 0 then bs else tmp
-    in
-        B.append x (B.replicate padCount (fromIntegral padCount))
 
 aesBlockSize :: Int64
 aesBlockSize = 16 :: Int64
@@ -65,10 +57,11 @@ testCBC =
     in
         myDecryptCBC key iv (myEncryptCBC key iv x)
 
+-- TODO possibly take RandomGen as input?
 genBytes :: Int -> IO B.ByteString
 genBytes n = do
-    res <- replicateM n $ getStdRandom random
-    return $ B.pack res
+    gen <- newStdGen
+    return $ B.pack $ take n $ randoms gen
 
 genKey :: IO AES
 genKey = genBytes 16 >>= return . initAES . B.toStrict
@@ -82,10 +75,10 @@ ecbOracle11 key isCbc pt = do
     let ptx = pkcs7 16 $ B.append before (B.append pt after)
     return $ if isCbc then myEncryptCBC key iv ptx else myEncryptECB key ptx
 
-byteStringHasRepeat :: B.ByteString -> Bool
-byteStringHasRepeat ct =
-    let cts = toChunksN 16 ct
-    in any ((>= 2) . length) (group $ sort cts)
+hasRepeatedBlock :: (Int -> Bool) -> B.ByteString -> Bool
+hasRepeatedBlock cmp ct =
+    let cts = toChunksN aesBlockSize ct
+    in any (cmp . length) (group $ sort cts)
 
 findBlockSize :: AES -> B.ByteString -> Maybe Int
 findBlockSize key unkStr =
@@ -114,7 +107,7 @@ doChallenge12 = do
     let ecbOracle12 pt = myEncryptECB key $ pkcs7 bs (B.append pt unkText)
 
     putStr "is ECB: "
-    putStrLn $ show $ byteStringHasRepeat $ ecbOracle12 (B.replicate 64 12)
+    putStrLn $ show $ hasRepeatedBlock (>= 2) $ ecbOracle12 (B.replicate 64 12)
 
     let breakEcbSimple ctr pre =
             let
@@ -156,20 +149,63 @@ encodeCookie obj =
 doChallenge13 :: IO ()
 doChallenge13 = do
     key <- genKey
-    let oracle = myEncryptECB key . pkcs7 16 . C8.pack
+    let oracle = myEncryptECB key . pkcs7 aesBlockSize . C8.pack
     let profile1 = encodeCookie $ profileFor "fooz@barz.com"
     -- email=fooz@barz.com&uid=10&role=user    user begins at 32, third
     -- 0    5    10   15   20   25   30   35
-    let ct1s = toChunksN 16 $ oracle profile1
+    let ct1s = toChunksN aesBlockSize $ oracle profile1
 
     let profile2 = encodeCookie $ profileFor ("AAAAAAAAAAadmin" ++ replicate 12 '\f')
     -- email=AAAAAAAAAAadmin----------&uid=10&role=user   admin begins at 16, second
     -- 0    5    10   15   20   25   30   35
-    let ct2s = toChunksN 16 $ oracle profile2
+    let ct2s = toChunksN aesBlockSize $ oracle profile2
 
     -- now reconstruct a forged ct from the two previous ct
     -- we have forged the admin role!
     putStrLn $ show $ myDecryptECB key $ B.concat [ ct1s !! 0, ct1s !! 1, ct2s !! 1 ]
+
+-- keep everything after the repated blocks, drop everything before it
+keepAfterRepeats :: Int64 -> (Int -> Bool) -> B.ByteString -> B.ByteString
+keepAfterRepeats bs cmp inp =
+    let inps = toChunksN bs inp
+        target = head $ head $ filter (cmp . length) (group $ sort inps)
+    in B.concat $ drop (1+(last $ elemIndices target inps)) inps
+
+doChallenge14 :: IO ()
+doChallenge14 = do
+    unkText <- fmap (base64ToByteString . concat . lines) (readFile "12.txt")
+    key <- genKey
+
+    -- AES-128-ECB( random-prefix || attacker-controlled || target-bytes, random-key )
+    let ecbOracle14 pt rnd = myEncryptECB key $ pkcs7 aesBlockSize (B.append rnd $ B.append pt unkText)
+
+    let targetCount = do
+        g <- newStdGen
+        randomBytes <- mapM genBytes (take 100 $ randomRs (0,255) g)
+        return $
+            map (keepAfterRepeats aesBlockSize (==4))
+                (map (ecbOracle14 (B.replicate (aesBlockSize*4) 65)) randomBytes)
+
+    targetCount >>= putStrLn . show
+
+--     let breakEcbSimple ctr pre =
+--             let
+--                 preMap = createCtPtMap key pre
+--                 initBlock = B.take (B.length pre + 1) (ecbOracle14 (B.take ctr pre))
+--                 solvedBlock = Map.lookup initBlock preMap
+--             in
+--                 if ctr == 0 || solvedBlock == Nothing
+--                 then pre
+--                 else breakEcbSimple (ctr-1) (B.tail (iHateMaybe solvedBlock))
+-- 
+--     -- length should always be a multiple of 16 due to pkcs7 padding
+--     let ctLen = B.length $ ecbOracle14 (C8.pack "")
+--     putStrLn $ if mod ctLen aesBlockSize == 0
+--                then "starting decryptiong (" ++ show ctLen ++ ")..."
+--                else error "ctLen not multiple of 16"
+-- 
+--     -- assuming the text won't start with \0
+--     putStr $ C8.unpack $ B.dropWhile (==0) $ breakEcbSimple (ctLen-1) (B.replicate (ctLen-1) 0)
 
 
 main = do
@@ -189,7 +225,7 @@ main = do
     putStrLn "challenge 11:"
     isCbc <- getStdRandom random
     ct11 <- genKey >>= \key -> ecbOracle11 key isCbc (C8.pack pt10) -- TODO need randomly generate plain text
-    putStrLn $ if isCbc /= (byteStringHasRepeat ct11)
+    putStrLn $ if isCbc /= (hasRepeatedBlock (>= 2) ct11)
                 then "prediciton correct!" else "prediction wrong..."
 
     putStrLn "challenge 12:"
@@ -197,6 +233,9 @@ main = do
 
     putStrLn "challenge 13:"
     doChallenge13
+
+    putStrLn "challenge 14:"
+    doChallenge14
 
     putStrLn "done"
 
