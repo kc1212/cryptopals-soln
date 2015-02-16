@@ -168,8 +168,11 @@ doChallenge13 = do
 keepAfterRepeats :: Int64 -> (Int -> Bool) -> B.ByteString -> B.ByteString
 keepAfterRepeats bs cmp inp =
     let inps = toChunksN bs inp
-        target = head $ head $ filter (cmp . length) (group $ sort inps)
-    in B.concat $ drop (1+(last $ elemIndices target inps)) inps
+        filtered = filter (cmp . length) (group $ sort inps)
+        dropStuff x = B.concat $ drop (1+(last $ elemIndices x inps)) inps
+    in if length filtered == 0 then C8.pack ""
+        else if length (head filtered) == 0 then error "critical error!"
+        else dropStuff (head $ head filtered)
 
 doChallenge14 :: IO ()
 doChallenge14 = do
@@ -178,13 +181,16 @@ doChallenge14 = do
 
     -- AES-128-ECB( random-prefix || attacker-controlled || target-bytes, random-key )
     let ecbOracle14 pt rnd = myEncryptECB key $ pkcs7 aesBlockSize (B.append rnd $ B.append pt unkText)
+    let tries = 200
 
     let targetCount = do
         g <- newStdGen
-        randomBytes <- mapM genBytes (take 100 $ randomRs (0,255) g)
+        randomBytes <- mapM genBytes (take tries $ randomRs (0,255) g)
+        -- let randomBytes = (replicate 2 . C8.pack . replicate 16) 'A'
         return $
-            map (keepAfterRepeats aesBlockSize (==4))
-                (map (ecbOracle14 (B.replicate (aesBlockSize*4) 65)) randomBytes)
+            head $ filter (>0) $
+                map (B.length . keepAfterRepeats aesBlockSize (==4))
+                    (map (ecbOracle14 (B.replicate (aesBlockSize*4) 65)) randomBytes)
 
     targetCount >>= putStrLn . show
 
