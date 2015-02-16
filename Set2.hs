@@ -179,39 +179,36 @@ doChallenge14 = do
     unkText <- fmap (base64ToByteString . concat . lines) (readFile "12.txt")
     key <- genKey
 
+    let tries = 500
+    let myWord = 65
+    let myBlocks = 4
+
     -- AES-128-ECB( random-prefix || attacker-controlled || target-bytes, random-key )
-    let ecbOracle14 pt rnd = myEncryptECB key $ pkcs7 aesBlockSize (B.append rnd $ B.append pt unkText)
-    let tries = 200
+    let ecbOracle14 pt = do
+        randomBytes <- newStdGen >>= \g -> genBytes (head $ randomRs (0,255) g)
+        return $ myEncryptECB key $ pkcs7 aesBlockSize (B.append randomBytes $ B.append pt unkText)
 
-    let targetCount = do
-        g <- newStdGen
-        randomBytes <- mapM genBytes (take tries $ randomRs (0,255) g)
-        -- let randomBytes = (replicate 2 . C8.pack . replicate 16) 'A'
-        return $
-            head $ filter (>0) $
-                map (B.length . keepAfterRepeats aesBlockSize (==4))
-                    (map (ecbOracle14 (B.replicate (aesBlockSize*4) 65)) randomBytes)
+    -- find the length of the target-bytes
+    let ctLen = do
+        cts <- replicateM tries (ecbOracle14 (B.replicate (aesBlockSize*myBlocks) myWord))
+        return $ head $ filter (>0) $ map (B.length . keepAfterRepeats aesBlockSize (==myBlocks)) cts
 
-    targetCount >>= putStrLn . show
+    let breakEcbHarder ctr pre = do
 
---     let breakEcbSimple ctr pre =
---             let
---                 preMap = createCtPtMap key pre
---                 initBlock = B.take (B.length pre + 1) (ecbOracle14 (B.take ctr pre))
---                 solvedBlock = Map.lookup initBlock preMap
---             in
---                 if ctr == 0 || solvedBlock == Nothing
---                 then pre
---                 else breakEcbSimple (ctr-1) (B.tail (iHateMaybe solvedBlock))
--- 
---     -- length should always be a multiple of 16 due to pkcs7 padding
---     let ctLen = B.length $ ecbOracle14 (C8.pack "")
---     putStrLn $ if mod ctLen aesBlockSize == 0
---                then "starting decryptiong (" ++ show ctLen ++ ")..."
---                else error "ctLen not multiple of 16"
--- 
---     -- assuming the text won't start with \0
---     putStr $ C8.unpack $ B.dropWhile (==0) $ breakEcbSimple (ctLen-1) (B.replicate (ctLen-1) 0)
+            -- append 4 blocks before 'pre', run the oracle many times, until 'pre' starts at the block boundry
+            listTry <- replicateM tries $ ecbOracle14 (B.append (B.replicate (aesBlockSize*myBlocks) myWord) (B.take ctr pre))
+            let goodTry = head $ filter ((>0) . B.length) $ map (keepAfterRepeats aesBlockSize (==myBlocks)) listTry
+
+            let preMap = createCtPtMap key pre
+            let initBlock = B.take (B.length pre + 1) goodTry
+            let solvedBlock = Map.lookup initBlock preMap
+
+            if ctr == 0 || solvedBlock == Nothing
+            then return pre
+            else breakEcbHarder (ctr-1) (B.tail (iHateMaybe solvedBlock))
+
+    -- assuming the text won't start with \0
+    ctLen >>= \x -> breakEcbHarder (x-1) (B.replicate (x-1) 0) >>= return . C8.unpack . B.dropWhile (==0) >>= putStr
 
 
 main = do
@@ -219,6 +216,7 @@ main = do
     let res9 = pkcs7 20 (C8.pack "YELLOW SUBMARINE")
     putStrLn $ show res9
     putStrLn $ show $ B.unpack res9
+    putStrLn ""
 
     putStrLn "challenge 10:"
     putStrLn $ show testCBC
@@ -227,21 +225,26 @@ main = do
     let iv10 = C8.pack $ "0000000000000000"
     let pt10 = C8.unpack $ myDecryptCBC key10 iv10 ct10
     putStr pt10
+    putStrLn ""
 
     putStrLn "challenge 11:"
     isCbc <- getStdRandom random
     ct11 <- genKey >>= \key -> ecbOracle11 key isCbc (C8.pack pt10) -- TODO need randomly generate plain text
     putStrLn $ if isCbc /= (hasRepeatedBlock (>= 2) ct11)
                 then "prediciton correct!" else "prediction wrong..."
+    putStrLn ""
 
     putStrLn "challenge 12:"
     doChallenge12
+    putStrLn ""
 
     putStrLn "challenge 13:"
     doChallenge13
+    putStrLn ""
 
     putStrLn "challenge 14:"
     doChallenge14
+    putStrLn ""
 
     putStrLn "done"
 
