@@ -181,7 +181,7 @@ doChallenge14 = do
 
     let tries = 500
     let myWord = 65
-    let myBlocks = 4
+    let myBlocks = 2
 
     -- AES-128-ECB( random-prefix || attacker-controlled || target-bytes, random-key )
     let ecbOracle14 pt = do
@@ -191,25 +191,34 @@ doChallenge14 = do
     -- find the length of the target-bytes
     let ctLen = do
         cts <- replicateM tries (ecbOracle14 (B.replicate (aesBlockSize*myBlocks) myWord))
-        return $ head $ filter (>0) $ map (B.length . keepAfterRepeats aesBlockSize (==myBlocks)) cts
+        return $ head $ filter (>0) $
+            map (B.length . keepAfterRepeats aesBlockSize (== fromIntegral myBlocks)) cts
 
+    -- append 4 blocks before 'pre', run the oracle many times, until 'pre' starts at the block boundry
+    -- TODO this algorithm cannot decrypt all the target-bytes
     let breakEcbHarder ctr pre = do
+        listTry <- replicateM tries $
+                        ecbOracle14 (B.append (B.replicate (aesBlockSize*myBlocks) myWord) (B.take ctr pre))
+        let goodTry = head $ filter (\x -> let l = B.length x in l > 0 && mod l aesBlockSize == 0) $
+                        map (keepAfterRepeats aesBlockSize (== fromIntegral myBlocks)) listTry
 
-            -- append 4 blocks before 'pre', run the oracle many times, until 'pre' starts at the block boundry
-            listTry <- replicateM tries $ ecbOracle14 (B.append (B.replicate (aesBlockSize*myBlocks) myWord) (B.take ctr pre))
-            let goodTry = head $ filter ((>0) . B.length) $ map (keepAfterRepeats aesBlockSize (==myBlocks)) listTry
+        let preMap = createCtPtMap key pre
+        let initBlock = B.take (B.length pre + 1) goodTry
+        let solvedBlock = Map.lookup initBlock preMap
 
-            let preMap = createCtPtMap key pre
-            let initBlock = B.take (B.length pre + 1) goodTry
-            let solvedBlock = Map.lookup initBlock preMap
+        if ctr == 0 || solvedBlock == Nothing
+        then return pre
+        else breakEcbHarder (ctr-1) (B.tail (iHateMaybe solvedBlock))
 
-            if ctr == 0 || solvedBlock == Nothing
-            then return pre
-            else breakEcbHarder (ctr-1) (B.tail (iHateMaybe solvedBlock))
-
-    -- assuming the text won't start with \0
     ctLen >>= \x -> breakEcbHarder (x-1) (B.replicate (x-1) 0) >>= return . C8.unpack . B.dropWhile (==0) >>= putStr
 
+validPkcs7 :: B.ByteString -> Maybe B.ByteString
+validPkcs7 inp =
+    let n = B.last inp
+        (bytes,pad) = B.splitAt (B.length inp - fromIntegral n) inp
+    in if B.all (==n) pad && mod (B.length inp) aesBlockSize == 0
+        then Just bytes
+        else Nothing
 
 main = do
     putStrLn "challenge 9:"
@@ -244,6 +253,12 @@ main = do
 
     putStrLn "challenge 14:"
     doChallenge14
+    putStrLn ""
+
+    putStrLn "challenge 15:"
+    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x04\x04\x04\x04"))
+    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x05\x05\x05\x05"))
+    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x03\x03\x03"))
     putStrLn ""
 
     putStrLn "done"
