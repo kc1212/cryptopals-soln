@@ -18,9 +18,6 @@ import Debug.Trace
 import Common
 import Set1
 
-aesBlockSize :: Int64
-aesBlockSize = 16 :: Int64
-
 errBlockSize :: a
 errBlockSize = error "wrong AES block size"
 
@@ -34,14 +31,14 @@ myDecryptECB aes x =
 
 myEncryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myEncryptCBC aes iv pt
-    | B.length iv == aesBlockSize =
+    | B.length iv == aesBs =
         B.concat $ tail $ scanl (\x y -> myEncryptECB aes (byteByteXor x y)) iv ptChunks
     | otherwise = errBlockSize
-    where ptChunks = toChunksN 16 (pkcs7 aesBlockSize pt)
+    where ptChunks = toChunksN 16 (pkcs7 aesBs pt)
 
 myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myDecryptCBC aes iv ct
-    | B.length iv == aesBlockSize =
+    | B.length iv == aesBs =
         B.concat $ map (\(x,y) -> byteByteXor y (myDecryptECB aes x)) ctPairs
     | otherwise = errBlockSize
     where
@@ -77,7 +74,7 @@ ecbOracle11 key isCbc pt = do
 
 hasRepeatedBlock :: (Int -> Bool) -> B.ByteString -> Bool
 hasRepeatedBlock cmp ct =
-    let cts = toChunksN aesBlockSize ct
+    let cts = toChunksN aesBs ct
     in any (cmp . length) (group $ sort cts)
 
 findBlockSize :: AES -> B.ByteString -> Maybe Int
@@ -129,36 +126,36 @@ doChallenge12 = do
     putStr $ C8.unpack $ B.dropWhile (==0) $ breakEcbSimple (ctLen-1) (B.replicate (ctLen-1) 0)
 
 
-type CookieObj = [(String,String)]
+type ProfileObj = [(String,String)]
 
-decodeCookie :: String -> CookieObj
-decodeCookie inp =
+decodeProfile :: String -> ProfileObj
+decodeProfile inp =
     let innerSplit x =
             let xs = splitOn "=" x
             in if length xs == 2 then (xs !! 0, xs !! 1) else error "parse error!"
     in map innerSplit (splitOn "&" inp)
 
-profileFor :: String -> CookieObj
+profileFor :: String -> ProfileObj
 profileFor inp =
     [("email", delete '&' $ delete '=' inp), ("uid", "10"), ("role", "user")]
 
-encodeCookie :: CookieObj -> String
-encodeCookie obj =
+encodeProfile :: ProfileObj -> String
+encodeProfile obj =
     init $ concatMap (\x -> (fst x) ++ '=':(snd x) ++ "&") obj
 
 doChallenge13 :: IO ()
 doChallenge13 = do
     key <- genKey
-    let oracle = myEncryptECB key . pkcs7 aesBlockSize . C8.pack
-    let profile1 = encodeCookie $ profileFor "fooz@barz.com"
+    let oracle = myEncryptECB key . pkcs7 aesBs . C8.pack
+    let profile1 = encodeProfile $ profileFor "fooz@barz.com"
     -- email=fooz@barz.com&uid=10&role=user    user begins at 32, third
     -- 0    5    10   15   20   25   30   35
-    let ct1s = toChunksN aesBlockSize $ oracle profile1
+    let ct1s = toChunksN aesBs $ oracle profile1
 
-    let profile2 = encodeCookie $ profileFor ("AAAAAAAAAAadmin" ++ replicate 12 '\f')
+    let profile2 = encodeProfile $ profileFor ("AAAAAAAAAAadmin" ++ replicate 12 '\f')
     -- email=AAAAAAAAAAadmin----------&uid=10&role=user   admin begins at 16, second
     -- 0    5    10   15   20   25   30   35
-    let ct2s = toChunksN aesBlockSize $ oracle profile2
+    let ct2s = toChunksN aesBs $ oracle profile2
 
     -- now reconstruct a forged ct from the two previous ct
     -- we have forged the admin role!
@@ -186,21 +183,21 @@ doChallenge14 = do
     -- AES-128-ECB( random-prefix || attacker-controlled || target-bytes, random-key )
     let ecbOracle14 pt = do
         randomBytes <- newStdGen >>= \g -> genBytes (head $ randomRs (0,255) g)
-        return $ myEncryptECB key $ pkcs7 aesBlockSize (B.append randomBytes $ B.append pt unkText)
+        return $ myEncryptECB key $ pkcs7 aesBs (B.append randomBytes $ B.append pt unkText)
 
     -- find the length of the target-bytes
     let ctLen = do
-        cts <- replicateM tries (ecbOracle14 (B.replicate (aesBlockSize*myBlocks) myWord))
+        cts <- replicateM tries (ecbOracle14 (B.replicate (aesBs*myBlocks) myWord))
         return $ head $ filter (>0) $
-            map (B.length . keepAfterRepeats aesBlockSize (== fromIntegral myBlocks)) cts
+            map (B.length . keepAfterRepeats aesBs (== fromIntegral myBlocks)) cts
 
     -- append 4 blocks before 'pre', run the oracle many times, until 'pre' starts at the block boundry
     -- TODO this algorithm cannot decrypt all the target-bytes
     let breakEcbHarder ctr pre = do
         listTry <- replicateM tries $
-                        ecbOracle14 (B.append (B.replicate (aesBlockSize*myBlocks) myWord) (B.take ctr pre))
-        let goodTry = head $ filter (\x -> let l = B.length x in l > 0 && mod l aesBlockSize == 0) $
-                        map (keepAfterRepeats aesBlockSize (== fromIntegral myBlocks)) listTry
+                        ecbOracle14 (B.append (B.replicate (aesBs*myBlocks) myWord) (B.take ctr pre))
+        let goodTry = head $ filter (\x -> let l = B.length x in l > 0 && mod l aesBs == 0) $
+                        map (keepAfterRepeats aesBs (== fromIntegral myBlocks)) listTry
 
         let preMap = createCtPtMap key pre
         let initBlock = B.take (B.length pre + 1) goodTry
@@ -212,13 +209,47 @@ doChallenge14 = do
 
     ctLen >>= \x -> breakEcbHarder (x-1) (B.replicate (x-1) 0) >>= return . C8.unpack . B.dropWhile (==0) >>= putStr
 
-validPkcs7 :: B.ByteString -> Maybe B.ByteString
-validPkcs7 inp =
-    let n = B.last inp
-        (bytes,pad) = B.splitAt (B.length inp - fromIntegral n) inp
-    in if B.all (==n) pad && mod (B.length inp) aesBlockSize == 0
-        then Just bytes
-        else Nothing
+prepUserData :: AES -> B.ByteString -> B.ByteString -> String -> B.ByteString -> B.ByteString
+prepUserData key iv front rawInp back =
+    let inp = C8.pack $ delete '&' $ delete '=' rawInp
+    in myEncryptCBC key iv (pkcs7 aesBs (B.append front $ B.append inp back))
+
+checkUserData :: AES -> B.ByteString -> B.ByteString -> Bool
+checkUserData key iv ct =
+    let pt = fmap C8.unpack (validPkcs7 $ myDecryptCBC key iv ct)
+        res = fmap (all (\(x,y) -> x == "admin" && y == "true")) (fmap decodeProfile pt)
+    in case res of
+        Nothing -> error "padding error"
+        Just True -> True
+        Just False -> False
+
+
+doChallenge16 = do
+    key <- genKey
+    iv  <- genBytes 16
+
+    let s1 = C8.pack "comment1=cooking%20MCs;userdata="
+    let s2 = C8.pack ";comment2=%20like%20a%20pound%20of%20bacon"
+    --                 0       8       16
+    --                 admin=true;AAAA=
+
+    -- extra length needed to fill s1 to block boundry
+    let extraLen = let l = mod (B.length s1) aesBs in if l == 0 then 0 else aesBs - l
+    let pt = C8.unpack $ B.replicate (aesBs + extraLen) 65
+    let ct = prepUserData key iv s1 pt s2
+
+    let loc = B.length s1 + extraLen
+    let fb = B.append
+                (B.append (B.replicate loc 0) (C8.pack "admin=true;AAAA="))
+                (B.replicate (B.length ct - loc - aesBs) 0)
+
+    let ct' = byteByteXor fb ct
+
+    -- putStrLn $ show (B.length s1) ++ ", " ++ show (B.length s2) ++ ", " 
+    --     ++ show loc ++ ", " ++ show extraLen ++ ", " ++ show (B.length fb)
+
+    -- TODO change this to use the checkUserData function
+    putStrLn $ C8.unpack $ myDecryptCBC key iv ct'
 
 main = do
     putStrLn "challenge 9:"
