@@ -16,7 +16,7 @@ import System.Random
 import Debug.Trace
 
 import Common
-import Set1
+import Set1 -- eventually we want to delete this
 
 errBlockSize :: a
 errBlockSize = error "wrong AES block size"
@@ -54,15 +54,6 @@ testCBC =
     in
         myDecryptCBC key iv (myEncryptCBC key iv x)
 
--- TODO possibly take RandomGen as input?
-genBytes :: Int -> IO B.ByteString
-genBytes n = do
-    gen <- newStdGen
-    return $ B.pack $ take n $ randoms gen
-
-genKey :: IO AES
-genKey = genBytes 16 >>= return . initAES . B.toStrict
-
 ecbOracle11 :: AES -> Bool -> B.ByteString -> IO B.ByteString
 ecbOracle11 key isCbc pt = do
     before  <- getStdRandom (randomR (5,10)) >>= genBytes
@@ -87,10 +78,6 @@ findBlockSize key unkStr =
 createCtPtMap :: AES -> B.ByteString -> Map.Map B.ByteString B.ByteString
 createCtPtMap key xs =
     Map.fromList $ map (\x -> (myEncryptECB key x, x)) (map (B.snoc xs) [0..255])
-
-iHateMaybe :: Maybe a -> a
-iHateMaybe (Just a) = a
-iHateMaybe Nothing = error "I loathe Nothing more!"
 
 doChallenge12 :: IO ()
 doChallenge12 = do
@@ -132,7 +119,9 @@ decodeProfile :: String -> ProfileObj
 decodeProfile inp =
     let innerSplit x =
             let xs = splitOn "=" x
-            in if length xs == 2 then (xs !! 0, xs !! 1) else error "parse error!"
+            in case (length xs) of
+                2 -> (xs !! 0, xs !! 1)
+                _ -> error ("parse error!: " ++ show xs)
     in map innerSplit (splitOn "&" inp)
 
 profileFor :: String -> ProfileObj
@@ -217,7 +206,7 @@ prepUserData key iv front rawInp back =
 checkUserData :: AES -> B.ByteString -> B.ByteString -> Bool
 checkUserData key iv ct =
     let pt = fmap C8.unpack (validPkcs7 $ myDecryptCBC key iv ct)
-        res = fmap (all (\(x,y) -> x == "admin" && y == "true")) (fmap decodeProfile pt)
+        res = fmap (isInfixOf ";admin=true;") pt
     in case res of
         Nothing -> error "padding error"
         Just True -> True
@@ -231,7 +220,7 @@ doChallenge16 = do
     let s1 = C8.pack "comment1=cooking%20MCs;userdata="
     let s2 = C8.pack ";comment2=%20like%20a%20pound%20of%20bacon"
     --                 0       8       16
-    --                 admin=true;AAAA=
+    --                 ;admin=true;AAA=
 
     -- extra length needed to fill s1 to block boundry
     let extraLen = let l = mod (B.length s1) aesBs in if l == 0 then 0 else aesBs - l
@@ -239,17 +228,13 @@ doChallenge16 = do
     let ct = prepUserData key iv s1 pt s2
 
     let loc = B.length s1 + extraLen
-    let fb = B.append
-                (B.append (B.replicate loc 0) (C8.pack "admin=true;AAAA="))
-                (B.replicate (B.length ct - loc - aesBs) 0)
+    let ct2 = byteByteXor (B.take aesBs s2) (C8.pack ";admin=true;AAA=")
+    let ctzeros = B.append
+                    (B.append (B.replicate loc 0) ct2)
+                    (B.replicate (B.length ct - loc - aesBs) 0)
+    let ct' = byteByteXor ctzeros ct
 
-    let ct' = byteByteXor fb ct
-
-    -- putStrLn $ show (B.length s1) ++ ", " ++ show (B.length s2) ++ ", " 
-    --     ++ show loc ++ ", " ++ show extraLen ++ ", " ++ show (B.length fb)
-
-    -- TODO change this to use the checkUserData function
-    putStrLn $ C8.unpack $ myDecryptCBC key iv ct'
+    putStrLn $ show $ if (checkUserData key iv ct' == True) then "success!" else "fail..."
 
 main = do
     putStrLn "challenge 9:"
@@ -290,6 +275,10 @@ main = do
     putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x04\x04\x04\x04"))
     putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x05\x05\x05\x05"))
     putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x03\x03\x03"))
+    putStrLn ""
+
+    putStrLn "challenge 16:"
+    doChallenge16
     putStrLn ""
 
     putStrLn "done"
