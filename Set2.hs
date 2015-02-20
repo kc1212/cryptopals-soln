@@ -1,8 +1,4 @@
 
-module Set2
-( pkcs7
-) where
-
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.Map as Map
@@ -10,40 +6,11 @@ import Control.Monad
 import Data.List
 import Data.List.Split
 import Data.Int (Int64)
-import Data.Word (Word8)
 import Crypto.Cipher.AES
 import System.Random
 import Debug.Trace
 
 import Common
-import Set1 -- eventually we want to delete this
-
-errBlockSize :: a
-errBlockSize = error "wrong AES block size"
-
-myEncryptECB :: AES -> B.ByteString -> B.ByteString
-myEncryptECB aes x =
-    B.fromStrict $ encryptECB aes (B.toStrict x)
-
-myDecryptECB :: AES -> B.ByteString -> B.ByteString
-myDecryptECB aes x =
-    B.fromStrict $ decryptECB aes (B.toStrict x)
-
-myEncryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
-myEncryptCBC aes iv pt
-    | B.length iv == aesBs =
-        B.concat $ tail $ scanl (\x y -> myEncryptECB aes (byteByteXor x y)) iv ptChunks
-    | otherwise = errBlockSize
-    where ptChunks = toChunksN 16 (pkcs7 aesBs pt)
-
-myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
-myDecryptCBC aes iv ct
-    | B.length iv == aesBs =
-        B.concat $ map (\(x,y) -> byteByteXor y (myDecryptECB aes x)) ctPairs
-    | otherwise = errBlockSize
-    where
-        ctChunks = toChunksN 16 ct
-        ctPairs = zip ctChunks (iv : init ctChunks)
 
 testCBC :: B.ByteString
 testCBC =

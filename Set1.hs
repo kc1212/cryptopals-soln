@@ -1,46 +1,23 @@
 
-module Set1
-( decodeHexStr
-, hexToBase64
-, byteByteXor
-, hexByteXor
-, hexHexXor
-, toChunksN
-, base64ToByteString
-) where
-
 import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Base64.Lazy as B64
-import qualified Data.ByteString.Base16.Lazy as B16
 import qualified Data.ByteString.Lazy.Char8 as C8
-import Data.List (sort, sortBy, elemIndex)
 import Data.Word (Word8)
-import Data.Int (Int64)
+import Data.List
 import Data.Char
 import Data.Bits
-import Data.Byteable
 import Debug.Trace
 import Crypto.Cipher.AES
 
+import Common
+
 
 -- challenge 1
-
 hexStr1 :: String
 hexStr1 = "49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d"
 -- I'm killing your brain like a poisonous mushroom
 
 base64Str1 :: String
 base64Str1 = "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t"
-
-decodeHexStr :: String -> B.ByteString
-decodeHexStr x =
-    let decodedStr = B16.decode $ C8.pack x
-    in if C8.null $ snd decodedStr
-        then fst decodedStr
-        else error "decoding hex failed"
-
-hexToBase64 :: String -> String
-hexToBase64 x = C8.unpack $ B64.encode $ decodeHexStr x
 
 testChallenge1 :: Bool
 testChallenge1 = hexToBase64 hexStr1 == base64Str1
@@ -50,15 +27,6 @@ testChallenge1 = hexToBase64 hexStr1 == base64Str1
 hexStr2a = "1c0111001f010100061a024b53535009181c"
 hexStr2b = "686974207468652062756c6c277320657965"
 hexStr2ans = "746865206b696420646f6e277420706c6179"
-
-byteByteXor :: B.ByteString -> B.ByteString -> B.ByteString
-byteByteXor a b = B.pack $ B.zipWith xor a b
-
-hexByteXor :: String -> B.ByteString -> B.ByteString
-hexByteXor a b = byteByteXor (decodeHexStr a) b
-
-hexHexXor :: String -> String -> B.ByteString
-hexHexXor a b = byteByteXor (decodeHexStr a) (decodeHexStr b)
 
 testChallenge2 :: Bool
 testChallenge2 = hexHexXor hexStr2a hexStr2b == decodeHexStr hexStr2ans
@@ -182,21 +150,6 @@ smallestHammingDist ns content =
     where
         distances = zip ns (map avgHammingDist ns)
         avgHammingDist x = hammingDistBetweenChunks x content / fromIntegral x
-
-toChunksN :: Int64 -> B.ByteString -> [B.ByteString]
-toChunksN n xs
-    | n <= 0 = error "n must be greater than zero"
-    | B.length xs == 0 = []
-    | otherwise =
-        let (a, b) = B.splitAt n xs
-        in [a] ++ toChunksN n b
-
-rightOrError :: Either String b -> b
-rightOrError (Left a)  = error a
-rightOrError (Right b) = b
-
-base64ToByteString :: String -> B.ByteString
-base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
 
 -- could use this instead of dictionary search
 goodHistogram :: String -> Bool
