@@ -3,6 +3,8 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
 import Control.Applicative
 import Crypto.Cipher.AES
+import Data.List
+import System.Random
 
 import Common
 
@@ -30,17 +32,21 @@ crackOneBlock inp oracle ct =
                 (map (\x -> (x, oracle $ B.concat $ forgeCt $ newBlk x)) [0..255])
     in if B.length inp == aesBs then inp
         else if length res == 1 then crackOneBlock (B.cons (fst $ head res) inp) oracle ct
-        else error $ "something went wrong. res: " ++ show res ++ ", inp: " ++ show inp
+        else error $ "something went wrong. \nres: " ++ show res ++ "\ninp: " ++ show inp
 
 doChallenge17 = do
     key <- genKey
     iv  <- genBytes 16
+    gen <- newStdGen
 
     pts <- lines <$> (readFile "17.txt") >>= return . map (C8.pack)
-    let pt = pts !! 0 -- TODO only attack one for now
+    let pt = pts !! (head $ randomRs (0, length pts - 1) gen)
     let ct = [iv] ++ toChunksN aesBs (encPaddingOracle key iv pt)
+    let cts = drop 2 $ inits ct
+    let res = iHateMaybe $ validPkcs7 $ B.concat $ map (crackOneBlock (C8.pack "") (decPaddingOracle key iv)) cts
 
-    putStrLn $ show $ crackOneBlock (C8.pack "") (decPaddingOracle key iv) ct
+    putStrLn $ show res
+    putStrLn $ show $ res == pt
 
 main = do
     doChallenge17
