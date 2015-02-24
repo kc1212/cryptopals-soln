@@ -24,6 +24,12 @@ hexToBase64 x = C8.unpack $ B64.encode $ decodeHexStr x
 byteByteXor :: B.ByteString -> B.ByteString -> B.ByteString
 byteByteXor a b = B.pack $ B.zipWith xor a b
 
+rightXor :: B.ByteString -> B.ByteString -> B.ByteString
+rightXor a b =
+    let (smaller,bigger) = if B.length a < B.length b then (a,b) else (b,a)
+        smaller' = B.append (B.replicate (abs $ B.length a - B.length b) 0) smaller
+    in B.pack $ B.zipWith xor smaller' bigger
+
 hexByteXor :: String -> B.ByteString -> B.ByteString
 hexByteXor a b = byteByteXor (decodeHexStr a) b
 
@@ -62,9 +68,13 @@ validPkcs7 :: B.ByteString -> Maybe B.ByteString
 validPkcs7 inp =
     let n = B.last inp
         (bytes,pad) = B.splitAt (B.length inp - fromIntegral n) inp
-    in if B.all (==n) pad && mod (B.length inp) aesBs == 0
+    in if n == 0 then Nothing -- last byte cannot end with zero
+        else if B.all (==n) pad && mod (B.length inp) aesBs == 0
         then Just bytes
         else Nothing
+
+endWith :: B.ByteString -> B.ByteString -> Bool
+endWith inp target = target == B.drop (B.length inp - B.length target) inp
 
 iHateMaybe :: Maybe a -> a
 iHateMaybe (Just a) = a
@@ -99,12 +109,13 @@ myDecryptECB :: AES -> B.ByteString -> B.ByteString
 myDecryptECB aes x =
     B.fromStrict $ decryptECB aes (B.toStrict x)
 
+-- note this includes padding
 myEncryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myEncryptCBC aes iv pt
     | B.length iv == aesBs =
         B.concat $ tail $ scanl (\x y -> myEncryptECB aes (byteByteXor x y)) iv ptChunks
     | otherwise = errBlockSize
-    where ptChunks = toChunksN 16 (pkcs7 aesBs pt)
+    where ptChunks = toChunksN 16 (pkcs7aes pt)
 
 myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myDecryptCBC aes iv ct
