@@ -51,11 +51,14 @@ doChallenge17 = do
 
 doChallenge18 = do
     let key = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
-    let nonce = C8.pack (replicate 8 '\NUL')
-    let ctr = C8.pack (replicate 8 '\NUL')
-    let ct = C8.pack "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=="
+    let ct = base64ToByteString "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=="
 
-    putStrLn $ show $ myCTR key nonce ctr ct
+    -- nonce and ctr both zero
+    putStrLn $ show $ myCTR key 0 0 ct
+
+    ctrR <- newStdGen >>= return . head . randoms
+    nonceR <- newStdGen >>= return . head . randoms
+    putStrLn $ show $ ct == myCTR key nonceR ctrR (myCTR key nonceR ctrR ct)
 
 
 main = do

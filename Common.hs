@@ -6,7 +6,8 @@ import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import Data.Int (Int64)
-import Data.Binary
+import Data.Binary (Word64)
+import Data.Binary.Put
 import Data.Bits
 import System.Random
 import Crypto.Cipher.AES
@@ -130,20 +131,13 @@ myDecryptCBC aes iv ct
         ctChunks = toChunksN aesBs ct
         ctPairs = zip ctChunks (iv : init ctChunks)
 
-verifyCtrInput :: B.ByteString -> B.ByteString -> Bool
-verifyCtrInput ctr nonce = B.length nonce == ctrBs && B.length ctr == ctrBs
-
-genCtrs :: B.ByteString -> Word64 -> [B.ByteString]
-genCtrs ctr n = map (encode . (+ decode ctr)) [0..n]
-
-myCTR :: AES -> B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString
-myCTR key nonce ctr t
-    | verifyCtrInput nonce ctr =
-        B.concat $ map (\(t,nctr) -> myEncryptECB key nctr `rightXor` t) pairs
-    | otherwise = errBlockSize
-    where
-        ts = toChunksN aesBs t
-        pairs = zip ts $ map (B.append nonce) (genCtrs ctr (fromIntegral $ length ts - 1))
-
+myCTR :: AES -> Word64 -> Word64 -> B.ByteString -> B.ByteString
+myCTR key nonce ctr t =
+    let ts = toChunksN aesBs t
+        toBS = runPut . putWord64le
+        ctrs = map (+ctr) [0..fromIntegral $ length ts - 1]
+        pairs = zip ts $ map (B.append . toBS $ nonce) (map toBS ctrs)
+    in B.concat $ map (\(t,nctr) -> myEncryptECB key nctr `byteByteXor` t) pairs
+    --                                                 left aligned xor (le)
 
 
