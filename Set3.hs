@@ -48,8 +48,25 @@ doChallenge17 = do
     putStrLn $ show res
     putStrLn $ show $ res == pt
 
+
+doChallenge18 = do
+    let key = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
+    let nonce = C8.pack (replicate 8 '\NUL')
+    let ctr = C8.pack (replicate 8 '\NUL')
+    let ct = C8.pack "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=="
+
+    putStrLn $ show $ myCTR key nonce ctr ct
+
+
 main = do
+    putStrLn "challenge 17:"
     doChallenge17
+    putStrLn ""
+
+    putStrLn "challenge 18:"
+    doChallenge18
+    putStrLn ""
+
     putStrLn "done"
 
 

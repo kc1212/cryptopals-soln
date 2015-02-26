@@ -6,6 +6,7 @@ import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import Data.Int (Int64)
+import Data.Binary
 import Data.Bits
 import System.Random
 import Crypto.Cipher.AES
@@ -98,8 +99,11 @@ genKey = genBytes 16 >>= return . initAES . B.toStrict
 aesBs :: Int64
 aesBs = 16
 
+ctrBs :: Int64
+ctrBs = 8
+
 errBlockSize :: a
-errBlockSize = error "wrong AES block size"
+errBlockSize = error "wrong block size, TODO add information..."
 
 myEncryptECB :: AES -> B.ByteString -> B.ByteString
 myEncryptECB aes x =
@@ -115,7 +119,7 @@ myEncryptCBC aes iv pt
     | B.length iv == aesBs =
         B.concat $ tail $ scanl (\x y -> myEncryptECB aes (byteByteXor x y)) iv ptChunks
     | otherwise = errBlockSize
-    where ptChunks = toChunksN 16 (pkcs7aes pt)
+    where ptChunks = toChunksN aesBs (pkcs7aes pt)
 
 myDecryptCBC :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 myDecryptCBC aes iv ct
@@ -123,6 +127,23 @@ myDecryptCBC aes iv ct
         B.concat $ map (\(x,y) -> byteByteXor y (myDecryptECB aes x)) ctPairs
     | otherwise = errBlockSize
     where
-        ctChunks = toChunksN 16 ct
+        ctChunks = toChunksN aesBs ct
         ctPairs = zip ctChunks (iv : init ctChunks)
+
+verifyCtrInput :: B.ByteString -> B.ByteString -> Bool
+verifyCtrInput ctr nonce = B.length nonce == ctrBs && B.length ctr == ctrBs
+
+genCtrs :: B.ByteString -> Word64 -> [B.ByteString]
+genCtrs ctr n = map (encode . (+ decode ctr)) [0..n]
+
+myCTR :: AES -> B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString
+myCTR key nonce ctr t
+    | verifyCtrInput nonce ctr =
+        B.concat $ map (\(t,nctr) -> myEncryptECB key nctr `rightXor` t) pairs
+    | otherwise = errBlockSize
+    where
+        ts = toChunksN aesBs t
+        pairs = zip ts $ map (B.append nonce) (genCtrs ctr (fromIntegral $ length ts - 1))
+
+
 
