@@ -1,9 +1,12 @@
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import Data.ByteString.Internal (w2c)
 import Control.Applicative
 import Crypto.Cipher.AES
 import Data.List
+import Data.Bits (xor)
+import Data.Word (Word8)
 import System.Random
 
 import Common
@@ -60,6 +63,22 @@ doChallenge18 = do
     nonceR <- newStdGen >>= return . head . randoms
     putStrLn $ show $ ct == myCTR key nonceR ctrR (myCTR key nonceR ctrR ct)
 
+findAsciiAfterXor :: [Word8] -> [Word8] -> [Word8]
+findAsciiAfterXor _ [] = []
+findAsciiAfterXor bs (x:xs) =
+    case all (\a -> isPrintAndAscii $ w2c (a `xor` x)) bs of
+        True -> x : findAsciiAfterXor bs xs
+        _    -> findAsciiAfterXor bs xs
+
+doChallenge19 = do
+    key <- genKey
+    let enc = myCTR key 0 0
+
+    cts <- lines <$> (readFile "19.txt") >>= return . map (enc . base64ToByteString)
+    let cts' = B.transpose cts
+    let res = map (\x -> findAsciiAfterXor (B.unpack x) [0..255]) cts'
+
+    putStrLn $ show $ map length res
 
 main = do
     putStrLn "challenge 17:"
@@ -68,6 +87,10 @@ main = do
 
     putStrLn "challenge 18:"
     doChallenge18
+    putStrLn ""
+
+    putStrLn "challenge 19:"
+    doChallenge19
     putStrLn ""
 
     putStrLn "done"

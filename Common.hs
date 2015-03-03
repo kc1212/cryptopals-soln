@@ -9,6 +9,7 @@ import Data.Int (Int64)
 import Data.Binary (Word64)
 import Data.Binary.Put
 import Data.Bits
+import Data.Char
 import System.Random
 import Crypto.Cipher.AES
 
@@ -95,6 +96,8 @@ genBytes n = do
 genKey :: IO AES
 genKey = genBytes 16 >>= return . initAES . B.toStrict
 
+isPrintAndAscii :: Char -> Bool
+isPrintAndAscii = \c -> isPrint c && isAscii c
 
 -- crypto ---------------------------------------------------------------------
 aesBs :: Int64
