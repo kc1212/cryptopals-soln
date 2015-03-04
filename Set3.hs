@@ -7,6 +7,7 @@ import Crypto.Cipher.AES
 import Data.List
 import Data.Bits (xor)
 import Data.Word (Word8)
+import Data.Char
 import System.Random
 
 import Common
@@ -63,22 +64,38 @@ doChallenge18 = do
     nonceR <- newStdGen >>= return . head . randoms
     putStrLn $ show $ ct == myCTR key nonceR ctrR (myCTR key nonceR ctrR ct)
 
-findAsciiAfterXor :: [Word8] -> [Word8] -> [Word8]
-findAsciiAfterXor _ [] = []
-findAsciiAfterXor bs (x:xs) =
-    case all (\a -> isPrintAndAscii $ w2c (a `xor` x)) bs of
-        True -> x : findAsciiAfterXor bs xs
-        _    -> findAsciiAfterXor bs xs
+goodHistogram2 :: String -> Bool
+goodHistogram2 str =
+    let
+        len = fromIntegral $ length str
+        allAscii = all isAscii str
+        myIsPunctuation x = isPunctuation x && all (x /=) "#$^&*_+=-][}{@\\|/<>~\DEL"
+        specialCheck = (fromIntegral $ length $ filter (\x -> isAlphaNum x || myIsPunctuation x || isSpace x) str) > (0.95 * len)
+        freqCheck = (fromIntegral $ length $ filter (\x -> x=='a' || x=='e' || x=='i' || x=='o' || x=='t') str) > (0.25 * len)
+    in
+        allAscii && freqCheck && specialCheck
 
+findTextAfterXor :: [Word8] -> [Word8] -> [Word8]
+findTextAfterXor _ [] = []
+findTextAfterXor bs (x:xs) =
+    case goodHistogram2 (map (w2c . xor x) bs) of
+        True -> x : findTextAfterXor bs xs
+        _    -> findTextAfterXor bs xs
+
+-- semi-automated, the remaining characters should be guessable
+-- can be improved if the first few characters are computed with a different rule
 doChallenge19 = do
     key <- genKey
     let enc = myCTR key 0 0
 
     cts <- lines <$> (readFile "19.txt") >>= return . map (enc . base64ToByteString)
     let cts' = B.transpose cts
-    let res = map (\x -> findAsciiAfterXor (B.unpack x) [0..255]) cts'
+    let res = map (\x -> findTextAfterXor (B.unpack x) [0..255]) cts'
+    let stream = B.pack $ map (\x -> if x == [] then 0 else head x) res
 
+    putStrLn $ show $ length $ filter ((==1) . length) res
     putStrLn $ show $ map length res
+    mapM (putStrLn . C8.unpack . byteByteXor stream) cts
 
 main = do
     putStrLn "challenge 17:"

@@ -99,6 +99,10 @@ genKey = genBytes 16 >>= return . initAES . B.toStrict
 isPrintAndAscii :: Char -> Bool
 isPrintAndAscii = \c -> isPrint c && isAscii c
 
+randomChoice :: [a] -> IO a
+randomChoice xs =
+    newStdGen >>= \gen -> return $ xs !! (head $ randomRs (0,length xs - 1) gen)
+
 -- crypto ---------------------------------------------------------------------
 aesBs :: Int64
 aesBs = 16
