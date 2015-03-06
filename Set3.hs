@@ -64,38 +64,56 @@ doChallenge18 = do
     nonceR <- newStdGen >>= return . head . randoms
     putStrLn $ show $ ct == myCTR key nonceR ctrR (myCTR key nonceR ctrR ct)
 
-goodHistogram2 :: String -> Bool
-goodHistogram2 str =
+goodHistogram2 :: Bool -> String -> Bool
+goodHistogram2 isFirst str =
     let
         len = fromIntegral $ length str
         allAscii = all isAscii str
         myIsPunctuation x = isPunctuation x && all (x /=) "#$^&*_+=-][}{@\\|/<>~\DEL"
         specialCheck = (fromIntegral $ length $ filter (\x -> isAlphaNum x || myIsPunctuation x || isSpace x) str) > (0.95 * len)
-        freqCheck = (fromIntegral $ length $ filter (\x -> x=='a' || x=='e' || x=='i' || x=='o' || x=='t') str) > (0.25 * len)
+        checkRule = if isFirst then (\x -> x=='t' || x=='a' || x=='s') else (\x -> x=='a' || x=='e' || x=='o' || x=='t')
+        checkPercent = if isFirst then 0.30 else 0.20
+        freqCheck = (fromIntegral $ length $ filter checkRule str) > (checkPercent * len)
     in
         allAscii && freqCheck && specialCheck
 
-findTextAfterXor :: [Word8] -> [Word8] -> [Word8]
-findTextAfterXor _ [] = []
-findTextAfterXor bs (x:xs) =
-    case goodHistogram2 (map (w2c . xor x) bs) of
-        True -> x : findTextAfterXor bs xs
-        _    -> findTextAfterXor bs xs
+findTextAfterXor :: Bool -> [Word8] -> [Word8] -> [Word8]
+findTextAfterXor isFirst _ [] = []
+findTextAfterXor isFirst bs (x:xs) =
+    case goodHistogram2 isFirst (map (w2c . xor x) bs) of
+        True -> x : findTextAfterXor isFirst bs xs
+        _    -> findTextAfterXor isFirst bs xs
 
 -- semi-automated, the remaining characters should be guessable
 -- can be improved if the first few characters are computed with a different rule
+-- TODO I used the method described in challenge 20 too early, this challenge uses a simpler method
 doChallenge19 = do
     key <- genKey
     let enc = myCTR key 0 0
-
     cts <- lines <$> (readFile "19.txt") >>= return . map (enc . base64ToByteString)
-    let cts' = B.transpose cts
-    let res = map (\x -> findTextAfterXor (B.unpack x) [0..255]) cts'
-    let stream = B.pack $ map (\x -> if x == [] then 0 else head x) res
 
-    putStrLn $ show $ length $ filter ((==1) . length) res
-    putStrLn $ show $ map length res
-    mapM (putStrLn . C8.unpack . byteByteXor stream) cts
+    let cts' = B.transpose cts
+    let resHead = (\x -> findTextAfterXor True (B.unpack x) [0..255]) (head cts')
+    let resRest = map (\x -> findTextAfterXor False (B.unpack x) [0..255]) (tail cts')
+    let res = B.pack $ map (\x -> if x == [] then 0 else head x) (resHead:resRest)
+
+    putStrLn $ show $ length $ filter ((==1) . length) (resHead:resRest)
+    mapM (putStrLn . toSafeString . C8.unpack . byteByteXor res) cts
+
+doChallenge20 = do
+    key <- genKey
+    let enc = myCTR key 0 0
+    cts <- lines <$> (readFile "20.txt") >>= return . map (enc . base64ToByteString)
+    let truncatedCts = map (B.take (last $ map B.length cts)) cts
+
+    let cts' = B.transpose truncatedCts
+    let resHead = (\x -> findTextAfterXor True (B.unpack x) [0..255]) (head cts')
+    let resRest = map (\x -> findTextAfterXor False (B.unpack x) [0..255]) (tail cts')
+    let res = B.pack $ map (\x -> if x == [] then 0 else head x) (resHead:resRest)
+
+    putStrLn $ show $ length $ filter ((==1) . length) (resHead:resRest)
+    mapM (putStrLn . toSafeString . C8.unpack . byteByteXor res) cts
+
 
 main = do
     putStrLn "challenge 17:"
@@ -108,6 +126,10 @@ main = do
 
     putStrLn "challenge 19:"
     doChallenge19
+    putStrLn ""
+
+    putStrLn "challenge 20:"
+    doChallenge20
     putStrLn ""
 
     putStrLn "done"

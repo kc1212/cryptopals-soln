@@ -103,6 +103,9 @@ randomChoice :: [a] -> IO a
 randomChoice xs =
     newStdGen >>= \gen -> return $ xs !! (head $ randomRs (0,length xs - 1) gen)
 
+toSafeString :: String -> String
+toSafeString inp = map (\x -> if isPrint x && isPrint x then x else '_') inp
+
 -- crypto ---------------------------------------------------------------------
 aesBs :: Int64
 aesBs = 16
