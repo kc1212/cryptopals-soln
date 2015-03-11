@@ -1,5 +1,5 @@
 
-module MersenneTwister (initGenerator, extractNumber) where
+module MersenneTwister (initGenerator, extractNumber, word32FromSeed) where
 
 import Data.Word (Word32)
 import Data.Bits
@@ -47,5 +47,8 @@ extractNumber (index,mt) =
         y4 = y3 `xor` (shiftL y3 15 .&. 0xefc60000)
         y  = y4 `xor` shiftR y4 18
     in ((mod (index + 1) mtSize, imt), y)
+
+word32FromSeed :: Word32 -> Word32
+word32FromSeed = snd . extractNumber . initGenerator
 
 

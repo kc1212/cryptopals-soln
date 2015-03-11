@@ -6,11 +6,13 @@ import Control.Applicative
 import Crypto.Cipher.AES
 import Data.List
 import Data.Bits (xor)
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
 import Data.Char
 import System.Random
+import Data.Time.Clock.POSIX
 
 import Common
+import qualified MersenneTwister as MT
 
 encPaddingOracle :: AES -> B.ByteString -> B.ByteString -> B.ByteString
 encPaddingOracle key iv inp = myEncryptCBC key iv inp
@@ -114,6 +116,26 @@ doChallenge20 = do
     putStrLn $ show $ length $ filter ((==1) . length) (resHead:resRest)
     mapM (putStrLn . toSafeString . C8.unpack . byteByteXor res) cts
 
+doChallenge21 = do
+    seed <- fmap round getPOSIXTime
+    putStrLn $ show $ MT.word32FromSeed seed
+
+-- this challenge is a bit slow, most likely due to my MT19937 implementation
+doChallenge22 = do
+    gen1 <- newStdGen
+    gen2 <- newStdGen
+    unkSeed <- (fmap round getPOSIXTime :: IO Word32) >>= \x -> return (x + head (randomRs (40,1000) gen1))
+
+    let randomNumber = MT.word32FromSeed unkSeed
+    let timeNow = unkSeed + head (randomRs (40,1000) gen2)
+
+    let res = head $ filter
+                        (\(_,rand) -> randomNumber==rand)
+                        (map (\x -> (x, MT.word32FromSeed x)) [timeNow - x | x <- [0..]])
+    putStrLn $ show res
+    putStrLn $ show $ fst res == unkSeed
+
+
 
 main = do
     putStrLn "challenge 17:"
@@ -130,6 +152,14 @@ main = do
 
     putStrLn "challenge 20:"
     doChallenge20
+    putStrLn ""
+
+    putStrLn "challenge 21:"
+    doChallenge21
+    putStrLn ""
+
+    putStrLn "challenge 22:"
+    doChallenge22
     putStrLn ""
 
     putStrLn "done"
