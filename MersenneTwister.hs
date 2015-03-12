@@ -1,5 +1,10 @@
 
-module MersenneTwister (initGenerator, extractNumber, word32FromSeed) where
+module MersenneTwister (
+    initGenerator,
+    extractNumber,
+    wordFromSeed,
+    listFromSeed)
+where
 
 import Data.Word (Word32)
 import Data.Bits
@@ -48,7 +53,17 @@ extractNumber (index,mt) =
         y  = y4 `xor` shiftR y4 18
     in ((mod (index + 1) mtSize, imt), y)
 
-word32FromSeed :: Word32 -> Word32
-word32FromSeed = snd . extractNumber . initGenerator
+wordFromSeed :: Word32 -> Word32
+wordFromSeed = snd . extractNumber . initGenerator
+
+listFromSeed :: Word32 -> Int -> [Word32]
+listFromSeed seed n = runListFromSeed n (initGenerator seed)
+
+runListFromSeed :: Int -> (Int,[Word32]) -> [Word32]
+runListFromSeed 0 _ = undefined
+runListFromSeed 1 state  = [snd . extractNumber $ state]
+runListFromSeed n state =
+    let (nextState, res) = extractNumber state
+    in res : runListFromSeed (n-1) nextState
 
 

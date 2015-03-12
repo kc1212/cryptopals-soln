@@ -118,7 +118,7 @@ doChallenge20 = do
 
 doChallenge21 = do
     seed <- fmap round getPOSIXTime
-    putStrLn $ show $ MT.word32FromSeed seed
+    putStrLn $ show $ MT.wordFromSeed seed
 
 -- this challenge is a bit slow, most likely due to my MT19937 implementation
 doChallenge22 = do
@@ -126,12 +126,12 @@ doChallenge22 = do
     gen2 <- newStdGen
     unkSeed <- (fmap round getPOSIXTime :: IO Word32) >>= \x -> return (x + head (randomRs (40,1000) gen1))
 
-    let randomNumber = MT.word32FromSeed unkSeed
+    let randomNumber = MT.wordFromSeed unkSeed
     let timeNow = unkSeed + head (randomRs (40,1000) gen2)
 
     let res = head $ filter
                         (\(_,rand) -> randomNumber==rand)
-                        (map (\x -> (x, MT.word32FromSeed x)) [timeNow - x | x <- [0..]])
+                        (map (\x -> (x, MT.wordFromSeed x)) [timeNow - x | x <- [0..]])
     putStrLn $ show res
     putStrLn $ show $ fst res == unkSeed
 
