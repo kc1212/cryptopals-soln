@@ -2,6 +2,7 @@
 module MersenneTwister (
     initGenerator,
     extractNumber,
+    generateNumber,
     wordFromSeed,
     listFromSeed)
 where
