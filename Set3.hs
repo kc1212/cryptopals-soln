@@ -117,8 +117,8 @@ doChallenge20 = do
     mapM (putStrLn . toSafeString . C8.unpack . byteByteXor res) cts
 
 doChallenge21 = do
-    seed <- fmap round getPOSIXTime
-    putStrLn $ show $ MT.wordFromSeed seed
+    putStrLn $ show $ MT.wordFromSeed 123
+    putStrLn $ show $ (MT.wordFromSeed 123 == 2991312382)
 
 -- this challenge is a bit slow, most likely due to my MT19937 implementation
 doChallenge22 = do
@@ -135,38 +135,15 @@ doChallenge22 = do
     putStrLn $ show res
     putStrLn $ show $ fst res == unkSeed
 
-untemperMT :: Word32 -> Word32
-untemperMT inp =
-    let y1 = inp `xor` (shiftR inp 18)
-        y2a = y1 `xor` 0xefc60000                       -- bit 0..14
-        y2b = y2a `xor` (shiftL y2a 15 .&. 0xefc60000)  -- bit 15..29
-        y2c = y2b `xor` (shiftL y2b 15 .&. 0xefc60000)  -- bit 30..31
-        y2 = y2c .&. 0xC0000000 `xor` y2b .&. 0x3FFF8000 `xor` y2a .&. 0x00007FFF
-        y3a = y2 `xor` 0x9d2c5680                       -- bit 0..6
-        y3b = y3a `xor` (shiftL y3a 7 .&. 0x9d2c5680)   -- bit 7..13
-        y3c = y3b `xor` (shiftL y3b 7 .&. 0x9d2c5680)   -- bit 14..20
-        y3d = y3c `xor` (shiftL y3c 7 .&. 0x9d2c5680)   -- bit 21..27
-        y3e = y3d `xor` (shiftL y3d 7 .&. 0x9d2c5680)   -- bit 28..31
-        y3 = y3e .&. 0xF0000000 `xor` y3d .&. 0x0FE00000 `xor` y3c .&. 0x001FC000 `xor`
-             y3b .&. 0x00003F80 `xor` y3a .&. 0x0000007F
-        y4a = y3 `xor` (shiftR y3 11)                   -- bit 21..31
-        y4b = y4a `xor` (shiftR y4a 11)                 -- bit 10..20
-        y4c = y4b `xor` (shiftR y4b 11)                 -- bit 0..9
-        y4 = y4a .&. 0xFFE00000 `xor` y4b .&. 0x001FFC00 `xor` y4a .&. 0x000003FF
-    in y4
-
-
 doChallenge23 = do
     gen <- newStdGen
     seed <- (fmap round getPOSIXTime :: IO Word32) >>= \x -> return (x + head (randomRs (40,1000) gen))
 
     let randomList = MT.listFromSeed seed 624
-    let internalState = map untemperMT randomList
-    putStrLn $ show internalState
-    putStrLn ""
-    putStrLn $ show $ snd (MT.initGenerator seed)
-    putStrLn ""
-    putStrLn $ show $ MT.generateNumber $ snd (MT.initGenerator seed)
+    let internalState = map MT.untemper randomList
+
+    putStrLn $ (show $ take 4 internalState) ++ "..."
+    putStrLn $ show $ internalState == MT.generateNumber (snd (MT.initGenerator seed))
 
 
 main = do
@@ -192,6 +169,10 @@ main = do
 
     putStrLn "challenge 22:"
     doChallenge22
+    putStrLn ""
+
+    putStrLn "challenge 23:"
+    doChallenge23
     putStrLn ""
 
     putStrLn "done"
