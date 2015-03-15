@@ -145,6 +145,15 @@ doChallenge23 = do
     putStrLn $ (show $ take 4 internalState) ++ "..."
     putStrLn $ show $ internalState == MT.generateNumber (snd (MT.initGenerator seed))
 
+doChallenge24 = do
+    key <- newStdGen >>= return . head . randoms
+    randomChars <- newStdGen >>=
+        \x -> let (a,g) = random x in return $ take (mod a 32) (randomRs (32,126) g)
+    let pt = C8.pack $ map chr randomChars ++ replicate 14 'A'
+    let ct = myStreamCipher key pt
+    let pt' = myStreamCipher key ct
+    putStrLn $ "cipher is working? " ++ show (pt == pt')
+
 
 main = do
     putStrLn "challenge 17:"

@@ -6,12 +6,14 @@ import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import Data.Int (Int64)
-import Data.Binary (Word64)
+import Data.Binary
 import Data.Binary.Put
 import Data.Bits
 import Data.Char
 import System.Random
 import Crypto.Cipher.AES
+
+import qualified MersenneTwister as MT
 
 -- utils ----------------------------------------------------------------------
 decodeHexStr :: String -> B.ByteString
@@ -149,5 +151,12 @@ myCTR key nonce ctr t =
         pairs = zip ts $ map (B.append . toBS $ nonce) (map toBS ctrs)
     in B.concat $ map (\(t,nctr) -> myEncryptECB key nctr `byteByteXor` t) pairs
     --                                                 left aligned xor (le)
+
+-- here we're using 16 bit seed (key) as requested by the question
+-- but MT19937 actually takes 32 bit seed
+myStreamCipher :: Word16 -> B.ByteString -> B.ByteString
+myStreamCipher key t =
+    let keyStream = MT.bytestringFromSeed (fromIntegral key) (B.length t)
+    in byteByteXor keyStream t
 
 

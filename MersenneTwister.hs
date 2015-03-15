@@ -5,12 +5,17 @@ module MersenneTwister (
     generateNumber,
     wordFromSeed,
     listFromSeed,
+    bytestringFromSeed,
     temper,
     untemper
 ) where
 
 import Data.Word (Word32)
+import Data.Int (Int64)
 import Data.Bits
+import Data.Binary
+import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.Char8 as C8
 
 -- MT19937 parameters
 mtSize = 624
@@ -97,5 +102,12 @@ runListFromSeed 1 state  = [snd . extractNumber $ state]
 runListFromSeed n state =
     let (nextState, res) = extractNumber state
     in res : runListFromSeed (n-1) nextState
+
+bytestringFromSeed :: Word32 -> Int64 -> B.ByteString
+bytestringFromSeed seed n =
+    let n32 = fromIntegral $ div n 4 + 1
+    in B.take n (B.concat (map encode (listFromSeed seed n32)))
+
+
 
 
