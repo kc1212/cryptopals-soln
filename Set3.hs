@@ -6,7 +6,7 @@ import Control.Applicative
 import Crypto.Cipher.AES
 import Data.List
 import Data.Bits
-import Data.Word (Word8, Word32)
+import Data.Word (Word8, Word16, Word32)
 import Data.Char
 import System.Random
 import Data.Time.Clock.POSIX
@@ -154,6 +154,15 @@ doChallenge24 = do
     let pt' = myStreamCipher key ct
     putStrLn $ "cipher is working? " ++ show (pt == pt')
 
+    -- we can just brute force a 16 bit key, this takes a long time to run..
+    let res = head $ filter (\(_,pt) -> all ('A'==) . take 14 . reverse . C8.unpack $ pt)
+                        (map (\x -> (x,myStreamCipher x ct)) [0..65535])
+    putStrLn $ "result is: " ++ (show res)
+
+    -- password reset token? don't quite understand this part of the question
+    -- please let me know if you do
+
+
 
 main = do
     putStrLn "challenge 17:"
@@ -182,6 +191,10 @@ main = do
 
     putStrLn "challenge 23:"
     doChallenge23
+    putStrLn ""
+
+    putStrLn "challenge 24:"
+    doChallenge24
     putStrLn ""
 
     putStrLn "done"
