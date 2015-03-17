@@ -108,6 +108,10 @@ randomChoice xs =
 toSafeString :: String -> String
 toSafeString inp = map (\x -> if isPrint x && isPrint x then x else '_') inp
 
+takeNthAesChunk :: Int -> B.ByteString -> B.ByteString
+takeNthAesChunk n xs = (toChunksN aesBs xs) !! n
+
+
 -- crypto ---------------------------------------------------------------------
 aesBs :: Int64
 aesBs = 16
@@ -158,5 +162,15 @@ myStreamCipher :: Word16 -> B.ByteString -> B.ByteString
 myStreamCipher key t =
     let keyStream = MT.bytestringFromSeed (fromIntegral key) (B.length t)
     in byteByteXor keyStream t
+
+myEditCTR :: AES -> Word64 -> Word64 -> B.ByteString -> Word64 -> B.ByteString -> B.ByteString
+myEditCTR key nonce ctr ct offset pt =
+    let cts@(front,back) = splitAt (fromIntegral offset) (toChunksN aesBs ct)
+        newCt = myCTR key nonce (ctr+offset) pt
+    in if B.length pt == 16 || fromIntegral offset >= div (B.length ct) aesBs
+        then B.concat (front ++ [newCt] ++ tail back)
+        else error "bad input parameter"
+
+
 
 
