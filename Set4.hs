@@ -24,9 +24,36 @@ doChallenge25 = do
     putStrLn $ res
 
 
+doChallenge26 = do
+    key <- genKey
+
+    let s1 = C8.pack "comment1=cooking%20MCs;userdata="
+    let s2 = C8.pack ";comment2=%20like%20a%20pound%20of%20bacon"
+    --                 0       8       16
+    --                 ;admin=true;AAA=
+
+    -- extra length needed to fill s1 to block boundry
+    let extraLen = let l = mod (B.length s1) aesBs in if l == 0 then 0 else aesBs - l
+    let pt = C8.unpack $ B.replicate (aesBs + extraLen) 65
+    let ct = prepUserData (myCTR key 1 2) s1 pt s2
+
+    let loc = B.length s1 + extraLen + aesBs
+    let ct2 = byteByteXor (B.take aesBs s2) (C8.pack ";admin=true;AAA=")
+    let ctzeros = B.append
+                    (B.append (B.replicate loc 0) ct2)
+                    (B.replicate (B.length ct - loc - aesBs) 0)
+    let ct' = byteByteXor ctzeros ct
+
+    putStrLn $ show $ if (checkUserData (myCTR key 1 2) ct' == True) then "success!" else "fail..."
+
+
 main = do
     putStrLn "challenge 25:"
     doChallenge25
+    putStrLn ""
+
+    putStrLn "challenge 26:"
+    doChallenge26
     putStrLn ""
 
 

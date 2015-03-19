@@ -165,20 +165,6 @@ doChallenge14 = do
 
     ctLen >>= \x -> breakEcbHarder (x-1) (B.replicate (x-1) 0) >>= return . C8.unpack . B.dropWhile (==0) >>= putStr
 
-prepUserData :: AES -> B.ByteString -> B.ByteString -> String -> B.ByteString -> B.ByteString
-prepUserData key iv front rawInp back =
-    let inp = C8.pack $ delete '&' $ delete '=' rawInp
-    in myEncryptCBC key iv (pkcs7 aesBs (B.append front $ B.append inp back))
-
-checkUserData :: AES -> B.ByteString -> B.ByteString -> Bool
-checkUserData key iv ct =
-    let pt = fmap C8.unpack (validPkcs7 $ myDecryptCBC key iv ct)
-        res = fmap (isInfixOf ";admin=true;") pt
-    in case res of
-        Nothing -> error "padding error"
-        Just True -> True
-        Just False -> False
-
 
 doChallenge16 = do
     key <- genKey
@@ -192,7 +178,7 @@ doChallenge16 = do
     -- extra length needed to fill s1 to block boundry
     let extraLen = let l = mod (B.length s1) aesBs in if l == 0 then 0 else aesBs - l
     let pt = C8.unpack $ B.replicate (aesBs + extraLen) 65
-    let ct = prepUserData key iv s1 pt s2
+    let ct = prepUserData (myEncryptCBC key iv) s1 pt s2
 
     let loc = B.length s1 + extraLen
     let ct2 = byteByteXor (B.take aesBs s2) (C8.pack ";admin=true;AAA=")
@@ -201,7 +187,7 @@ doChallenge16 = do
                     (B.replicate (B.length ct - loc - aesBs) 0)
     let ct' = byteByteXor ctzeros ct
 
-    putStrLn $ show $ if (checkUserData key iv ct' == True) then "success!" else "fail..."
+    putStrLn $ show $ if (checkUserData (myDecryptCBC key iv) ct' == True) then "success!" else "fail..."
 
 main = do
     putStrLn "challenge 9:"
