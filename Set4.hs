@@ -1,9 +1,11 @@
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import Data.Char
 import Crypto.Cipher.AES
 
 import Common
+
 
 doChallenge25 = do
     let keyOld = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
@@ -46,6 +48,28 @@ doChallenge26 = do
 
     putStrLn $ show $ if (checkUserData (myCTR key 1 2) ct' == True) then "success!" else "fail..."
 
+-- this is a bit weird because Just something will represent failure
+checkHighAscii :: Bs -> (Maybe Bs)
+checkHighAscii xs =
+    case all isAscii (C8.unpack xs) of
+        True -> Nothing
+        False -> Just xs
+
+doChallenge27 = do
+    iv <- genBytes 16
+    let key = initAES $ B.toStrict iv
+
+    let pt  = B.concat (B.replicate aesBs 65 : B.replicate aesBs 66 : B.replicate aesBs 67 : [])
+    let ct  = myEncryptCBC key iv pt -- padding will be added to the end
+    let ct' = let (a:b:c) = toChunksN aesBs ct
+                in B.concat $ a : B.replicate aesBs 0 : a : []
+    let key' =
+            case checkHighAscii (myDecryptCBC key iv ct') of
+                Nothing -> Nothing
+                Just x  -> let pts = toChunksN aesBs x in Just (byteByteXor (head pts) (pts !! 2))
+
+    putStrLn $ show $ fmap (iv==) key'
+
 
 main = do
     putStrLn "challenge 25:"
@@ -54,6 +78,10 @@ main = do
 
     putStrLn "challenge 26:"
     doChallenge26
+    putStrLn ""
+
+    putStrLn "challenge 27:"
+    doChallenge27
     putStrLn ""
 
 
