@@ -32,6 +32,9 @@ hexToBase64 x = C8.unpack $ B64.encode $ decodeHexStr x
 byteByteXor :: Bs -> Bs -> Bs
 byteByteXor a b = B.pack $ B.zipWith xor a b
 
+bbXor :: Bs -> Bs -> Bs
+bbXor = byteByteXor
+
 rightXor :: Bs -> Bs -> Bs
 rightXor a b =
     let (smaller,bigger) = if B.length a < B.length b then (a,b) else (b,a)
