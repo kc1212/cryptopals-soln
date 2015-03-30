@@ -1,16 +1,14 @@
 
-module ShaOne (shaOne, shaOneBase64) where
+module ShaOne (shaOne, shaOneB64, shaOneHex) where
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified Data.ByteString.Base64.Lazy as B64
+import qualified Data.ByteString.Base16.Lazy as B16
 import Data.Binary
 import Data.Bits
 
-import Common (toChunksN, bbXor)
-
--- since we're taking bytestring as input to our sha1 function, we can assume
--- the input parameter is always on a byte boundry
+import Common (toChunksN)
 
 type Bs = B.ByteString
 type HTuple = (Word32, Word32, Word32, Word32, Word32)
@@ -25,11 +23,13 @@ toChunksNWord32 ws =
         16 -> res
         _  -> error "length of toChunksNWord32 is not 16!"
 
+-- since we're taking bytestring as input to our sha1 function, we can assume
+-- the input parameter is always on a byte boundry
 preProcess :: Bs -> Bs
 preProcess inp =
     let len = B.length inp
-        extraLen = (64 + 56 - (len+1) `mod` 64) `mod` 64
-        rest = 128 `B.cons` (B.replicate extraLen 0) `B.append` encode len
+        extraLen = (56 - (len+1) `mod` 64) `mod` 64
+        rest = 0x80 `B.cons` (B.replicate extraLen 0) `B.append` encode (8*len)
     in B.append inp rest
 
 -- extend 16*32bit words to 80*32bit words
@@ -72,12 +72,15 @@ doMainLoop (a,b,c,d,e) w i =
         else
             error ("doMainLoop out of range: " ++ show i)
 
+-- this returns the a, b, c, d, e
 mainLoop :: HTuple -> [Word32] -> HTuple
 mainLoop (a,b,c,d,e) w = doMainLoop (a,b,c,d,e) w 0
 
 -- this for a single 512 bit chunk
 shaOneOnChunk :: HTuple -> Bs -> HTuple
-shaOneOnChunk hTuple chunk = mainLoop hTuple (extend $ toChunksNWord32 chunk)
+shaOneOnChunk (h0, h1, h2, h3, h4) chunk =
+    let (a, b, c, d, e) = mainLoop (h0, h1, h2, h3, h4) (extend $ toChunksNWord32 chunk)
+    in (h0 + a, h1 + b, h2 + c, h3 + d, h4 + e)
 
 shaOneOnChunkS :: HTuple -> [Bs] -> HTuple
 shaOneOnChunkS hTuple [x] = shaOneOnChunk hTuple x
@@ -91,6 +94,9 @@ shaOne inp =
         (h0,h1,h2,h3,h4) = shaOneOnChunkS hs inp'
     in B.concat $ map encode (h0:h1:h2:h3:h4:[])
 
-shaOneBase64 :: Bs -> String
-shaOneBase64 = C8.unpack . B64.encode . shaOne
+shaOneB64 :: Bs -> String
+shaOneB64 = C8.unpack . B64.encode . shaOne
+
+shaOneHex :: Bs -> String
+shaOneHex = C8.unpack . B16.encode . shaOne
 

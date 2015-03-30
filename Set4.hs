@@ -5,6 +5,7 @@ import Data.Char
 import Crypto.Cipher.AES
 
 import Common
+import ShaOne
 
 
 doChallenge25 = do
@@ -70,6 +71,22 @@ doChallenge27 = do
 
     putStrLn $ show $ fmap (iv==) key'
 
+doChallenge28 = do
+    key <- genBytes 16
+    let msg = C8.pack "my message"
+    let digest = shaOne (B.append key msg)
+
+    let msg2 = C8.pack "my messaga"
+    let digest2 = shaOne (B.append key msg2)
+
+    putStrLn $ show $ digest2 /= digest
+
+    let test1 = C8.pack "The quick brown fox jumps over the lazy dog"
+    let test2 = C8.pack "The quick brown fox jumps over the lazy cog"
+    let test3 = C8.pack ""
+    putStrLn $ show $ shaOneB64 test1 == "L9ThxnotKPzthJ7hu3bnORuT6xI="
+                   && shaOneHex test2 == "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3"
+                   && shaOneHex test3 == "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 
 main = do
     putStrLn "challenge 25:"
@@ -84,4 +101,6 @@ main = do
     doChallenge27
     putStrLn ""
 
-
+    putStrLn "challenge 28:"
+    doChallenge28
+    putStrLn ""
