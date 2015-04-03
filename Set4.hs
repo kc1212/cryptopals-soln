@@ -1,6 +1,7 @@
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import qualified Data.ByteString.Base16.Lazy as B16
 import System.Random
 import Data.Char
 import Data.Binary
@@ -99,19 +100,19 @@ shaOneRegisters xs =
         _ -> error "invalid input"
 
 doChallenge29 = do
-    key <- (head . randomRs (5,10) <$> newStdGen) >>= genBytes
+    key <- (head . randomRs (5,1000) <$> newStdGen) >>= genBytes
     let msg1  = C8.pack "comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon"
     let hash1 = shaOne $ key `B.append` msg1
     let state = shaOneRegisters hash1
-    let forge = C8.pack ";admin=true"
 
-    -- got lazy a bit, ideally we need to compute forgedLen from an oracle
-    let hash2 = let (h0,h1,h2,h3,h4) = shaOneOnChunkS state (preProcessForged forge forgedLen)
-                    forgedLen = B.length (B.concat $ preProcess $ key `B.append` msg1) + B.length forge
+    let forge = C8.pack ";admin=true"
+    let hash2 fakeKey = let (h0,h1,h2,h3,h4) = shaOneOnChunkS state (preProcessForged forge forgedLen)
+                            forgedLen = B.length (B.concat $ preProcess $ fakeKey `B.append` msg1) + B.length forge
                 in B.concat $ map encode (h0:h1:h2:h3:h4:[])
     let msg2  = B.concat (preProcess (key `B.append` msg1)) `B.append` forge
 
-    putStrLn $ show $ hash2 == shaOne msg2
+    let res = head . filter (== shaOne msg2) . map hash2 $ map (\x -> B.replicate x 0) [0..2000]
+    putStrLn $ show $ "forged hash: " ++ C8.unpack (B16.encode res)
 
 
 main = do
