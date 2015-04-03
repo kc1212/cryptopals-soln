@@ -1,5 +1,13 @@
 
-module ShaOne (shaOne, shaOneB64, shaOneHex) where
+module ShaOne (
+    HTuple,
+    shaOne,
+    shaOneB64,
+    shaOneHex,
+    preProcess,
+    preProcessForged,
+    shaOneOnChunkS
+) where
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
@@ -7,10 +15,10 @@ import qualified Data.ByteString.Base64.Lazy as B64
 import qualified Data.ByteString.Base16.Lazy as B16
 import Data.Binary
 import Data.Bits
+import Data.Int (Int64)
 
-import Common (toChunksN)
+import Common (Bs, toChunksN)
 
-type Bs = B.ByteString
 type HTuple = (Word32, Word32, Word32, Word32, Word32)
 
 bitNot :: Word32 -> Word32
@@ -25,12 +33,14 @@ toChunksNWord32 ws =
 
 -- since we're taking bytestring as input to our sha1 function, we can assume
 -- the input parameter is always on a byte boundry
-preProcess :: Bs -> Bs
-preProcess inp =
-    let len = B.length inp
-        extraLen = (56 - (len+1) `mod` 64) `mod` 64
+preProcess :: Bs -> [Bs]
+preProcess inp = preProcessForged inp (B.length inp)
+
+preProcessForged :: Bs -> Int64 -> [Bs]
+preProcessForged inp len =
+    let extraLen = (56 - (len+1) `mod` 64) `mod` 64
         rest = 0x80 `B.cons` (B.replicate extraLen 0) `B.append` encode (8*len)
-    in B.append inp rest
+    in toChunksN 64 (B.append inp rest)
 
 -- extend 16*32bit words to 80*32bit words
 extend :: [Word32] -> [Word32]
@@ -89,9 +99,8 @@ shaOneOnChunkS hTuple (x:xs) =
 
 shaOne :: Bs -> Bs
 shaOne inp =
-    let inp' = toChunksN 64 (preProcess inp)
-        hs = (0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0) :: HTuple
-        (h0,h1,h2,h3,h4) = shaOneOnChunkS hs inp'
+    let hs = (0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0) :: HTuple
+        (h0,h1,h2,h3,h4) = shaOneOnChunkS hs (preProcess inp)
     in B.concat $ map encode (h0:h1:h2:h3:h4:[])
 
 shaOneB64 :: Bs -> String

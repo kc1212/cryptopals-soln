@@ -1,8 +1,11 @@
 
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C8
+import System.Random
 import Data.Char
+import Data.Binary
 import Crypto.Cipher.AES
+import Control.Applicative
 
 import Common
 import ShaOne
@@ -88,6 +91,29 @@ doChallenge28 = do
                    && shaOneHex test2 == "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3"
                    && shaOneHex test3 == "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 
+shaOneRegisters :: Bs -> HTuple
+shaOneRegisters xs =
+    let xl = map decode (toChunksN 4 xs)
+    in case length xl of
+        5 -> (xl!!0, xl!!1, xl!!2, xl!!3, xl!!4)
+        _ -> error "invalid input"
+
+doChallenge29 = do
+    key <- (head . randomRs (5,10) <$> newStdGen) >>= genBytes
+    let msg1  = C8.pack "comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon"
+    let hash1 = shaOne $ key `B.append` msg1
+    let state = shaOneRegisters hash1
+    let forge = C8.pack ";admin=true"
+
+    -- got lazy a bit, ideally we need to compute forgedLen from an oracle
+    let hash2 = let (h0,h1,h2,h3,h4) = shaOneOnChunkS state (preProcessForged forge forgedLen)
+                    forgedLen = B.length (B.concat $ preProcess $ key `B.append` msg1) + B.length forge
+                in B.concat $ map encode (h0:h1:h2:h3:h4:[])
+    let msg2  = B.concat (preProcess (key `B.append` msg1)) `B.append` forge
+
+    putStrLn $ show $ hash2 == shaOne msg2
+
+
 main = do
     putStrLn "challenge 25:"
     doChallenge25
@@ -104,3 +130,9 @@ main = do
     putStrLn "challenge 28:"
     doChallenge28
     putStrLn ""
+
+    putStrLn "challenge 29:"
+    doChallenge29
+    putStrLn ""
+
+
