@@ -56,12 +56,12 @@ doChallenge34 = do
     let p = globalP
     let g = globalG
 
+    -- forge bigA as bigA', and send it to B
     a <- randPosInteger p
-    let bigA = powm g a p
     let bigA' = p
 
+    -- forge bigB as bigB', and send it to A
     b <- randPosInteger p
-    let bigB = powm g b p
     let bigB' = p
 
     -- sa and sb should both be zero
@@ -72,18 +72,59 @@ doChallenge34 = do
     msga <- dhEnc sa msg
     msgb <- dhEnc sb (dhDec sb msga)
 
+    let key = 0
     -- decrypt the message as attacker
-    putStrLn $ show $ dhDec 0 msga
-    putStrLn $ show $ dhDec 0 msgb
+    putStrLn $ show $
+        B.take 5 (dhDec key msga) == B.take 5 (dhDec key msgb)
+
+
+doChallenge35 y x = do
+    let p = y
+    let g' = if x == 1 || x == p || x == (p-1) then x else error "invalid x"
+
+    a <- randPosInteger p
+    let bigA' = powm g' a p
+
+    b <- randPosInteger p
+    let bigB' = powm g' b p
+
+    -- sa and sb will be predictable when using forged g
+    let sa = powm bigB' a p
+    let sb = powm bigA' b p
+
+    let msg = C8.pack "ohlala"
+    msga <- dhEnc sa msg
+    msgb <- dhEnc sb (dhDec sb msga)
+
+    -- decrypt the message as attacker
+    let key =
+            if x == 1
+                then 1
+            else if x == p
+                then 0
+            else if x == (p - 1) && bigA' == (p - 1) && bigB' == (p - 1)
+                then p - 1
+            else if x == (p - 1) -- bigA' == 1 || bigB' == 1
+                then 1
+            else
+                error "error..."
+
+    putStrLn $ show $
+        B.take 5 (dhDec key msga) == B.take 5 (dhDec key msgb)
 
 
 main = do
-    putStrLn "challenge 33 simple:"
+    putStrLn "challenge 33:"
     doChallenge33
     putStrLn ""
 
-    putStrLn "challenge 34 simple:"
+    putStrLn "challenge 34:"
     doChallenge34
     putStrLn ""
 
+    putStrLn "challenge 35:"
+    doChallenge35 globalP 1
+    doChallenge35 globalP globalP
+    doChallenge35 globalP (globalP - 1)
+    putStrLn ""
 
