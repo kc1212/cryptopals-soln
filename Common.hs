@@ -117,6 +117,20 @@ toSafeString inp = map (\x -> if isPrint x && isPrint x then x else '_') inp
 takeNthAesChunk :: Int -> Bs -> Bs
 takeNthAesChunk n xs = (toChunksN aesBs xs) !! n
 
+discreteLog :: Integer -> Integer
+discreteLog =
+    let runner ctr inp = if (2^ctr == inp) then ctr
+        else if (2^ctr > inp) then error "no result"
+        else runner (ctr+1) inp
+    in runner 0
+
+runPowm :: Integer -> Integer -> Integer -> Integer -> Integer
+runPowm b 0 m r = r
+runPowm b e m r | e `mod` 2 == 1 = runPowm (b * b `mod` m) (e `div` 2) m (r * b `mod` m)
+runPowm b e m r = runPowm (b * b `mod` m) (e `div` 2) m r
+
+powm :: Integer -> Integer -> Integer -> Integer
+powm b e m = runPowm b e m 1
 
 -- crypto ---------------------------------------------------------------------
 aesBs :: Int64
