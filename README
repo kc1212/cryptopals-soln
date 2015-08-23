@@ -1,6 +1,2 @@
-wget http://www.stackage.org/lts/cabal.config
-cabal sandbox init
-cabal update
-cabal install random byteable cipher-aes base64-bytestring base16-bytestring split
-cabal repl
-
+curl https://nixos.org/nix/install | sh
+nix-shell
