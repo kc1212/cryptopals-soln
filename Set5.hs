@@ -35,6 +35,9 @@ dhDec shared (msg, iv) =
     myDecryptCBC key iv msg
     where key = initAES . B.toStrict . B.take 16 . shaOne . encode $ shared
 
+nistPrime :: Integer
+nistPrime = 2 ^ 255 - 19
+
 doChallenge33 = do
     let p = globalP
     let g = globalG
@@ -112,6 +115,47 @@ doChallenge35 y x = do
     putStrLn $ show $
         B.take 5 (dhDec key msga) == B.take 5 (dhDec key msgb)
 
+doChallenge36 = do
+    let g = globalG
+    let k = 3
+    let email = "myname@domain.me" -- not used?
+    let pw = "Password1"
+
+    -- server
+    salt <- genBytes 32
+    let xs = decode . shaOne $ B.append salt (C8.pack pw) :: Integer
+    let v = powm g xs nistPrime
+
+    -- client -> server
+    a <- randPosInteger nistPrime
+    let bigA = powm g a nistPrime
+
+    -- server -> client
+    b <- randPosInteger nistPrime
+    let bigB = k * v + powm g b nistPrime
+
+    -- both compute uH
+    let u = decode . shaOne . B.append (encode bigA) $ (encode bigB) :: Integer
+
+    -- client
+    let xc = decode . shaOne . B.append salt $ C8.pack pw :: Integer
+    let bigSc = powm (bigB - k * g ^ xc) (a + u * xc) nistPrime
+    let bigKc = shaOne (encode bigSc)
+
+    -- server
+    let bigSs = powm (bigA * v ^ u) b nistPrime
+    let bigKs = shaOne (encode bigSs)
+
+    -- send hmac from client to server
+    let hmacc = shaOneHmac bigKc salt
+
+    -- -- verify hmac at server
+    let hmacs = shaOneHmac bigKs salt
+
+    putStrLn . C8.unpack . encode $ bigSc
+    putStrLn "getting not enough bytes error..."
+
+
 
 main = do
     putStrLn "challenge 33:"
@@ -127,4 +171,7 @@ main = do
     doChallenge35 globalP globalP
     doChallenge35 globalP (globalP - 1)
     putStrLn ""
+
+    putStrLn "challenge 36:"
+    doChallenge36
 

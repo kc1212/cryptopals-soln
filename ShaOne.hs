@@ -6,7 +6,8 @@ module ShaOne (
     shaOneHex,
     preProcess,
     preProcessForged,
-    shaOneOnChunkS
+    shaOneOnChunkS,
+    shaOneHmac
 ) where
 
 import qualified Data.ByteString.Lazy as B
@@ -17,7 +18,7 @@ import Data.Binary
 import Data.Bits
 import Data.Int (Int64)
 
-import Common (Bs, toChunksN)
+import Common (Bs, toChunksN, bbXor)
 
 type HTuple = (Word32, Word32, Word32, Word32, Word32)
 
@@ -108,4 +109,14 @@ shaOneB64 = C8.unpack . B64.encode . shaOne
 
 shaOneHex :: Bs -> String
 shaOneHex = C8.unpack . B16.encode . shaOne
+
+shaOneHmac :: Bs -> Bs -> Bs
+shaOneHmac key msg =
+    if B.length key /= (fromIntegral sz) then error "bad key"
+    else shaOne (oKeyPad `B.append` shaOne (iKeyPad `B.append` msg))
+    where
+        sz = 20 -- shaOne is 160 bits or 20 bytes
+        oKeyPad = B.pack (replicate 0x5c sz) `bbXor` key
+        iKeyPad = B.pack (replicate 0x36 sz) `bbXor` key
+
 
