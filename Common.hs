@@ -13,6 +13,7 @@ import Data.Char
 import Data.List
 import System.Random
 import Crypto.Cipher.AES
+import Data.Numbers.Primes (primes)
 
 import qualified MersenneTwister as MT
 
@@ -205,5 +206,39 @@ checkUserData dec ct =
         Nothing -> error "padding error"
         Just True -> True
         Just False -> False
+
+-- RSA related stuff ----------------------------------------------------------
+type PubKey = Integer
+type SecKey = (Integer, Integer)
+
+genRsaKeys :: IO (PubKey, SecKey)
+genRsaKeys = do
+    let randRange = (0, 100000) -- index for primes
+    g0 <- newStdGen
+    let (r1,g1) = randomR randRange g0
+    let (r2,g2) = randomR randRange g1
+    let (r3,_)  = randomR randRange g2
+
+    let p = primes !! r1 -- take r1'th prime number
+    let q = primes !! r2 -- and r2'th
+    let n = p * q
+
+    let phi = (p - 1) * (q - 1)
+    let ringz = filter ((1==) . gcd phi) [2..phi - 1]
+    let e = ringz !! r3 -- unlikely for ringz to be shorter than r3
+    let d = modInv e phi
+
+    return (d, (e, n))
+
+
+gcdExt a 0 = (1, 0, a)
+gcdExt a b = let (q, r) = a `quotRem` b
+                 (s, t, g) = gcdExt b r
+             in (t, s - q * t, g)
+
+
+modInv a m = let (i, _, g) = gcdExt a m
+             in if g == 1 then mkPos i else error "couldn't find modInv"
+  where mkPos x = if x < 0 then x + m else x
 
 

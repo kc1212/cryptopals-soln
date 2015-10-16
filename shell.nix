@@ -2,7 +2,7 @@
 let
   inherit (nixpkgs) pkgs;
   ghc = pkgs.haskell.packages.${compiler}.ghcWithPackages (ps: with ps;
-    [mtl random byteable cipher-aes base64-bytestring base16-bytestring split]);
+    [mtl random byteable cipher-aes base64-bytestring base16-bytestring split primes]);
 
 in
 pkgs.stdenv.mkDerivation {
