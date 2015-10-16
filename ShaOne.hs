@@ -116,7 +116,7 @@ shaOneHmac key msg =
     else shaOne (oKeyPad `B.append` shaOne (iKeyPad `B.append` msg))
     where
         sz = 20 -- shaOne is 160 bits or 20 bytes
-        oKeyPad = B.pack (replicate 0x5c sz) `bbXor` key
-        iKeyPad = B.pack (replicate 0x36 sz) `bbXor` key
+        oKeyPad = B.map (xor 0x5c) key
+        iKeyPad = B.map (xor 0x36) key
 
 
