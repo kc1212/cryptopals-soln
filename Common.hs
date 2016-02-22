@@ -93,6 +93,16 @@ rightOrError :: Either String b -> b
 rightOrError (Left a)  = error a
 rightOrError (Right b) = b
 
+bsToInt :: Bs -> Integer
+bsToInt = B.foldl (\b a -> b * 256 + fromIntegral a) 0
+
+intToBs :: Integer -> Bs
+intToBs x =
+    if x >= 256 then B.append ws w else (B.singleton . fromIntegral) x
+    where
+        w = (B.singleton . fromIntegral) (x `mod` 256)
+        ws = intToBs (x `div` 256)
+
 -- TODO possibly take RandomGen as input?
 genBytes :: Int -> IO Bs
 genBytes n = do
