@@ -28,7 +28,7 @@ doChallenge25 = do
                         [0..length (toChunksN aesBs ct) - 1]
     let res = C8.unpack $ byteByteXor keyStream ct
 
-    putStrLn $ res
+    putStrLn res
 
 
 doChallenge26 = do
@@ -51,14 +51,12 @@ doChallenge26 = do
                     (B.replicate (B.length ct - loc - aesBs) 0)
     let ct' = byteByteXor ctzeros ct
 
-    putStrLn $ show $ if (checkUserData (myCTR key 1 2) ct' == True) then "success!" else "fail..."
+    print $ if (checkUserData (myCTR key 1 2) ct' == True) then "success!" else "fail..."
 
 -- this is a bit weird because Just something will represent failure
-checkHighAscii :: Bs -> (Maybe Bs)
+checkHighAscii :: Bs -> Maybe Bs
 checkHighAscii xs =
-    case all isAscii (C8.unpack xs) of
-        True -> Nothing
-        False -> Just xs
+    if all isAscii (C8.unpack xs) then Nothing else Just xs
 
 doChallenge27 = do
     iv <- genBytes 16
@@ -73,7 +71,7 @@ doChallenge27 = do
                 Nothing -> Nothing
                 Just x  -> let pts = toChunksN aesBs x in Just (byteByteXor (head pts) (pts !! 2))
 
-    putStrLn $ show $ fmap (iv==) key'
+    print $ fmap (iv==) key'
 
 doChallenge28 = do
     key <- genBytes 16
@@ -83,12 +81,12 @@ doChallenge28 = do
     let msg2 = C8.pack "my messaga"
     let digest2 = shaOne (B.append key msg2)
 
-    putStrLn $ show $ digest2 /= digest
+    print $ digest2 /= digest
 
     let test1 = C8.pack "The quick brown fox jumps over the lazy dog"
     let test2 = C8.pack "The quick brown fox jumps over the lazy cog"
     let test3 = C8.pack ""
-    putStrLn $ show $ shaOneB64 test1 == "L9ThxnotKPzthJ7hu3bnORuT6xI="
+    print $ shaOneB64 test1 == "L9ThxnotKPzthJ7hu3bnORuT6xI="
                    && shaOneHex test2 == "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3"
                    && shaOneHex test3 == "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 
@@ -112,7 +110,7 @@ doChallenge29 = do
     let msg2  = B.concat (preProcess (key `B.append` msg1)) `B.append` forge
 
     let res = head . filter (== shaOne msg2) . map hash2 $ map (\x -> B.replicate x 0) [0..2000]
-    putStrLn $ show $ "forged hash: " ++ C8.unpack (B16.encode res)
+    print $ "forged hash: " ++ C8.unpack (B16.encode res)
 
 
 main = do

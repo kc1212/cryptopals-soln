@@ -12,6 +12,7 @@ import Data.Bits
 import Data.Char
 import Data.List
 import System.Random
+import Control.Monad (liftM)
 import Crypto.Cipher.AES
 import Data.Numbers.Primes (primes)
 
@@ -54,7 +55,7 @@ toChunksN n xs
     | B.length xs == 0 = []
     | otherwise =
         let (a, b) = B.splitAt n xs
-        in [a] ++ toChunksN n b
+        in a : toChunksN n b
 
 base64ToByteString :: String -> Bs
 base64ToByteString str = rightOrError $ B64.decode $ C8.pack str
@@ -88,10 +89,6 @@ validPkcs7 inp =
 endWith :: Bs -> Bs -> Bool
 endWith inp target = target == B.drop (B.length inp - B.length target) inp
 
-iHateMaybe :: Maybe a -> a
-iHateMaybe (Just a) = a
-iHateMaybe Nothing = error "I loathe Nothing more!"
-
 rightOrError :: Either String b -> b
 rightOrError (Left a)  = error a
 rightOrError (Right b) = b
@@ -103,10 +100,10 @@ genBytes n = do
     return $ B.pack $ take n $ randoms gen
 
 genKey :: IO AES
-genKey = genBytes 16 >>= return . initAES . B.toStrict
+genKey = liftM (initAES . B.toStrict) (genBytes 16)
 
 isPrintAndAscii :: Char -> Bool
-isPrintAndAscii = \c -> isPrint c && isAscii c
+isPrintAndAscii c = isPrint c && isAscii c
 
 randomChoice :: [a] -> IO a
 randomChoice xs =
@@ -116,12 +113,12 @@ toSafeString :: String -> String
 toSafeString inp = map (\x -> if isPrint x && isPrint x then x else '_') inp
 
 takeNthAesChunk :: Int -> Bs -> Bs
-takeNthAesChunk n xs = (toChunksN aesBs xs) !! n
+takeNthAesChunk n xs = toChunksN aesBs xs !! n
 
 discreteLog :: Integer -> Integer
 discreteLog =
-    let runner ctr inp = if (2^ctr == inp) then ctr
-        else if (2^ctr > inp) then error "no result"
+    let runner ctr inp = if 2^ctr == inp then ctr
+        else if 2^ctr > inp then error "no result"
         else runner (ctr+1) inp
     in runner 0
 

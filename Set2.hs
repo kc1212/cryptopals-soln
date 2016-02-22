@@ -6,6 +6,7 @@ import Control.Monad
 import Data.List
 import Data.List.Split
 import Data.Int (Int64)
+import Data.Maybe (fromJust, isNothing)
 import Crypto.Cipher.AES
 import System.Random
 import Debug.Trace
@@ -17,7 +18,7 @@ testCBC =
     let
         x = C8.pack "testing CBC... randomly typing on the my t420 keyboard"
         key = initAES $ B.toStrict $ pkcs7 16 $ C8.pack "hello!!!"
-        iv = C8.pack $ "0000000000000000"
+        iv = C8.pack "0000000000000000"
     in
         myDecryptCBC key iv (myEncryptCBC key iv x)
 
@@ -52,13 +53,13 @@ doChallenge12 = do
     key <- genKey
 
     putStr "block size: "
-    let bs = iHateMaybe $ fmap (fromIntegral . (+1)) (findBlockSize key unkText)
-    putStrLn $ show $ bs
+    let bs = fromJust $ fmap (fromIntegral . (+1)) (findBlockSize key unkText)
+    print bs
 
     let ecbOracle12 pt = myEncryptECB key $ pkcs7 bs (B.append pt unkText)
 
     putStr "is ECB: "
-    putStrLn $ show $ hasRepeatedBlock (>= 2) $ ecbOracle12 (B.replicate 64 12)
+    print $ hasRepeatedBlock (>= 2) $ ecbOracle12 (B.replicate 64 12)
 
     let breakEcbSimple ctr pre =
             let
@@ -66,9 +67,9 @@ doChallenge12 = do
                 initBlock = B.take (B.length pre + 1) (ecbOracle12 (B.take ctr pre))
                 solvedBlock = Map.lookup initBlock preMap
             in
-                if ctr == 0 || solvedBlock == Nothing
+                if ctr == 0 || isNothing solvedBlock
                 then pre
-                else breakEcbSimple (ctr-1) (B.tail (iHateMaybe solvedBlock))
+                else breakEcbSimple (ctr-1) (B.tail (fromJust solvedBlock))
 
     -- length should always be a multiple of 16 due to pkcs7 padding
     let ctLen = B.length $ ecbOracle12 (C8.pack "")
@@ -86,7 +87,7 @@ decodeProfile :: String -> ProfileObj
 decodeProfile inp =
     let innerSplit x =
             let xs = splitOn "=" x
-            in case (length xs) of
+            in case length xs of
                 2 -> (xs !! 0, xs !! 1)
                 _ -> error ("parse error!: " ++ show xs)
     in map innerSplit (splitOn "&" inp)
@@ -97,7 +98,7 @@ profileFor inp =
 
 encodeProfile :: ProfileObj -> String
 encodeProfile obj =
-    init $ concatMap (\x -> (fst x) ++ '=':(snd x) ++ "&") obj
+    init $ concatMap (\x -> fst x ++ '=' : snd x ++ "&") obj
 
 doChallenge13 :: IO ()
 doChallenge13 = do
@@ -115,16 +116,16 @@ doChallenge13 = do
 
     -- now reconstruct a forged ct from the two previous ct
     -- we have forged the admin role!
-    putStrLn $ show $ myDecryptECB key $ B.concat [ ct1s !! 0, ct1s !! 1, ct2s !! 1 ]
+    print $ myDecryptECB key $ B.concat [ ct1s !! 0, ct1s !! 1, ct2s !! 1 ]
 
 -- keep everything after the repated blocks, drop everything before it
 keepAfterRepeats :: Int64 -> (Int -> Bool) -> B.ByteString -> B.ByteString
 keepAfterRepeats bs cmp inp =
     let inps = toChunksN bs inp
         filtered = filter (cmp . length) (group $ sort inps)
-        dropStuff x = B.concat $ drop (1+(last $ elemIndices x inps)) inps
-    in if length filtered == 0 then C8.pack ""
-        else if length (head filtered) == 0 then error "critical error!"
+        dropStuff x = B.concat $ drop (1 + last (elemIndices x inps)) inps
+    in if null filtered then C8.pack ""
+        else if null (head filtered) then error "critical error!"
         else dropStuff (head $ head filtered)
 
 doChallenge14 :: IO ()
@@ -159,9 +160,9 @@ doChallenge14 = do
         let initBlock = B.take (B.length pre + 1) goodTry
         let solvedBlock = Map.lookup initBlock preMap
 
-        if ctr == 0 || solvedBlock == Nothing
+        if ctr == 0 || isNothing solvedBlock
         then return pre
-        else breakEcbHarder (ctr-1) (B.tail (iHateMaybe solvedBlock))
+        else breakEcbHarder (ctr-1) (B.tail (fromJust solvedBlock))
 
     ctLen >>= \x -> breakEcbHarder (x-1) (B.replicate (x-1) 0) >>= return . C8.unpack . B.dropWhile (==0) >>= putStr
 
@@ -187,20 +188,20 @@ doChallenge16 = do
                     (B.replicate (B.length ct - loc - aesBs) 0)
     let ct' = byteByteXor ctzeros ct
 
-    putStrLn $ show $ if (checkUserData (myDecryptCBC key iv) ct' == True) then "success!" else "fail..."
+    print $ if checkUserData (myDecryptCBC key iv) ct' then "success!" else "fail..."
 
 main = do
     putStrLn "challenge 9:"
     let res9 = pkcs7 20 (C8.pack "YELLOW SUBMARINE")
-    putStrLn $ show res9
-    putStrLn $ show $ B.unpack res9
+    print res9
+    print $ B.unpack res9
     putStrLn ""
 
     putStrLn "challenge 10:"
-    putStrLn $ show testCBC
+    print testCBC
     ct10 <- fmap (base64ToByteString . concat . lines) (readFile "10.txt")
     let key10 = initAES $ B.toStrict $ C8.pack "YELLOW SUBMARINE"
-    let iv10 = C8.pack $ "0000000000000000"
+    let iv10 = C8.pack "0000000000000000"
     let pt10 = C8.unpack $ myDecryptCBC key10 iv10 ct10
     putStr pt10
     putStrLn ""
@@ -208,7 +209,7 @@ main = do
     putStrLn "challenge 11:"
     isCbc <- getStdRandom random
     ct11 <- genKey >>= \key -> ecbOracle11 key isCbc (C8.pack pt10) -- TODO need randomly generate plain text
-    putStrLn $ if isCbc /= (hasRepeatedBlock (>= 2) ct11)
+    putStrLn $ if isCbc /= hasRepeatedBlock (>= 2) ct11
                 then "prediciton correct!" else "prediction wrong..."
     putStrLn ""
 
@@ -225,9 +226,9 @@ main = do
     putStrLn ""
 
     putStrLn "challenge 15:"
-    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x04\x04\x04\x04"))
-    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x05\x05\x05\x05"))
-    putStrLn $ show $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x03\x03\x03"))
+    print $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x04\x04\x04\x04"))
+    print $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x05\x05\x05\x05"))
+    print $ fmap C8.unpack (validPkcs7 (C8.pack "ICE ICE BABY\x03\x03\x03"))
     putStrLn ""
 
     putStrLn "challenge 16:"

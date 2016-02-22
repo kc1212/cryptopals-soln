@@ -38,7 +38,7 @@ hexStr3 :: String
 hexStr3 = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
 
 isAllPrintAndAscii :: String -> Bool
-isAllPrintAndAscii str = all isPrintAndAscii str
+isAllPrintAndAscii = all isPrintAndAscii
 
 -- -- TODO everything toLower?
 -- isEnglish :: [String] -> String -> Bool
@@ -139,7 +139,7 @@ hammingDistBetweenChunks sz content =
         pairChunks = zip (map (chunks !!) odds) (map (chunks !!) evens)
         len = fromIntegral (length pairChunks)
     in
-        fromIntegral (sum $ map (\(a,b) -> hammingDist a b) pairChunks) / len
+        fromIntegral (sum $ map (uncurry hammingDist) pairChunks) / len
 
 smallestHammingDist :: (Ord a, Fractional a) => [Int] -> B.ByteString -> [(Int,a)]
 smallestHammingDist ns content =
@@ -154,7 +154,7 @@ goodHistogram str =
     let
         len = fromIntegral $ length str
         allAscii = all isAscii str
-        myIsPunctuation x = isPunctuation x && all (x /=) "#$^&*_+=-][}{@\\|/<>~\DEL"
+        myIsPunctuation x = isPunctuation x && notElem x "#$^&*_+=-][}{@\\|/<>~\DEL"
         spaceCheck = (fromIntegral $ length $ filter isSpace str) > (0.025 * len)
         specialCheck = (fromIntegral $ length $ filter (\x -> isAlphaNum x || myIsPunctuation x || isSpace x) str) > (0.95 * len)
     in
@@ -168,7 +168,7 @@ solveSingleBlock xs =
     where keys = [ C8.pack [y] | x <- [0..128], let y = chr x ]
 
 solveMultiBlocks :: [B.ByteString] -> [[(Bool, Word8, String)]]
-solveMultiBlocks xss = map solveSingleBlock xss
+solveMultiBlocks = map solveSingleBlock
 -- solveMultiBlocks xss = map (findXorKeyByte isAllPrintAndAscii) xss
 
 collateKeys :: [[(Bool, Word8, String)]] -> B.ByteString
@@ -181,7 +181,7 @@ findTheKey f = do
     let (dist,_) = head $ smallestHammingDist [2..40] content
     let contentT = B.transpose $ toChunksN (fromIntegral dist) content
     -- print $ solveMultiBlocks $ contentT
-    let key = collateKeys $ solveMultiBlocks $ contentT
+    let key = collateKeys $ solveMultiBlocks contentT
     print $ "key is: " ++ C8.unpack key
     print $ "message is: "
     putStr $ C8.unpack $ repeatXor content key
@@ -203,13 +203,13 @@ testChallenge7 = do
 
 hammingDistAllComboInList :: [B.ByteString] -> Int
 hammingDistAllComboInList xs =
-    sum $ map (\(x1, x2) -> hammingDist x1 x2) [ (x1,x2) | x1 <- xs, x2 <- xs ]
+    sum $ map (uncurry hammingDist) [ (x1,x2) | x1 <- xs, x2 <- xs ]
 
 -- AES block size is 16
 testChallenge8 = do
-    cts <- fmap (\x -> map decodeHexStr (lines x)) (readFile "8.txt")
-    let dists = map (\ct -> hammingDistAllComboInList $ toChunksN 16 ct) cts
-    let minElem = head $ sort dists
+    cts <- fmap (map decodeHexStr . lines) (readFile "8.txt")
+    let dists = map (hammingDistAllComboInList . toChunksN 16) cts
+    let minElem = minimum dists
     print $ (show $ elemIndex minElem dists) ++ "th element is ECB with hamming distance of " ++ (show minElem)
 
 
