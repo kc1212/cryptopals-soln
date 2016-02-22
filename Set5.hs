@@ -14,10 +14,6 @@ randPosInteger :: Integer -> IO Integer
 randPosInteger p =
     head <$> filter (>1) <$> randomRs (0, p) <$> newStdGen
 
-bsToInteger :: Bs -> Integer
-bsToInteger bs =
-    foldl (\prev v -> prev * 256 + fromIntegral v) 0 (B.unpack bs)
-
 globalP :: Integer
 globalP = 0xffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d670c354e4abc9804f1746c08ca237327ffffffffffffffff
 
@@ -27,13 +23,13 @@ globalG = 2
 dhEnc :: Integer -> Bs -> IO (Bs, Bs)
 dhEnc shared msg = do
     iv <- genBytes 16
-    let key = initAES . B.toStrict . B.take 16 . shaOne . encode $ shared
+    let key = initAES . B.toStrict . B.take 16 . shaOne . intToBs $ shared
     return (myEncryptCBC key iv msg, iv)
 
 dhDec :: Integer -> (Bs, Bs) -> Bs
 dhDec shared (msg, iv) =
     myDecryptCBC key iv msg
-    where key = initAES . B.toStrict . B.take 16 . shaOne . encode $ shared
+    where key = initAES . B.toStrict . B.take 16 . shaOne . intToBs $ shared
 
 nistPrime :: Integer
 nistPrime = 2 ^ 255 - 19
@@ -123,7 +119,7 @@ doChallenge36 = do
 
     -- server
     salt <- genBytes 32
-    let xs = decode . shaOne $ B.append salt (C8.pack pw) :: Integer
+    let xs = bsToInt . shaOne $ B.append salt (C8.pack pw) :: Integer
     let v = powm g xs nistPrime
 
     -- client -> server
@@ -135,16 +131,16 @@ doChallenge36 = do
     let bigB = k * v + powm g b nistPrime
 
     -- both compute uH
-    let u = decode . shaOne . B.append (encode bigA) $ (encode bigB) :: Integer
+    let u = (bsToInt . shaOne . B.append (intToBs bigA)) (intToBs bigB) :: Integer
 
     -- client
-    let xc = decode . shaOne . B.append salt $ C8.pack pw :: Integer
-    let bigSc = powm (bigB - k * g ^ xc) (a + u * xc) nistPrime
-    let bigKc = shaOne (encode bigSc)
+    let xc = bsToInt . shaOne . B.append salt $ C8.pack pw :: Integer
+    let bigSc = powm (bigB - k * powm g xc nistPrime) (a + u * xc) nistPrime
+    let bigKc = shaOne (intToBs bigSc)
 
     -- server
-    let bigSs = powm (bigA * v ^ u) b nistPrime
-    let bigKs = shaOne (encode bigSs)
+    let bigSs = powm (bigA * powm v u nistPrime) b nistPrime
+    let bigKs = shaOne (intToBs bigSs)
 
     -- send hmac from client to server
     let hmacc = shaOneHmac bigKc salt
@@ -152,8 +148,7 @@ doChallenge36 = do
     -- -- verify hmac at server
     let hmacs = shaOneHmac bigKs salt
 
-    putStrLn . C8.unpack . encode $ bigSc
-    putStrLn "getting not enough bytes error..."
+    print $ hmacc == hmacs
 
 
 
