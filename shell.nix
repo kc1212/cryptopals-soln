@@ -1,8 +1,8 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc7102" }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc7103" }:
 let
   inherit (nixpkgs) pkgs;
   ghc = pkgs.haskell.packages.${compiler}.ghcWithPackages (ps: with ps;
-    [mtl random byteable cipher-aes base64-bytestring base16-bytestring split primes]);
+    [mtl random byteable cipher-aes base64-bytestring base16-bytestring split]);
 
 in
 pkgs.stdenv.mkDerivation {

@@ -150,7 +150,12 @@ doChallenge36 = do
 
     print $ hmacc == hmacs
 
-
+doChallenge39 = do
+    let msg = 123123
+    (pk, sk) <- genRsaKeys
+    let ct = rsaEnc pk msg
+    let pt = rsaDec sk ct
+    print $ pt == msg
 
 main = do
     putStrLn "challenge 33:"
@@ -169,4 +174,11 @@ main = do
 
     putStrLn "challenge 36:"
     doChallenge36
+
+    -- TODO 37 needs client/server
+    -- TODO 38
+
+    putStrLn "challenge 39:"
+    doChallenge39
+
 
