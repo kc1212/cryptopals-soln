@@ -40,7 +40,7 @@ preProcess inp = preProcessForged inp (B.length inp)
 preProcessForged :: Bs -> Int64 -> [Bs]
 preProcessForged inp len =
     let extraLen = (56 - (len+1) `mod` 64) `mod` 64
-        rest = 0x80 `B.cons` (B.replicate extraLen 0) `B.append` encode (8*len)
+        rest = 0x80 `B.cons` B.replicate extraLen 0 `B.append` encode (8*len)
     in toChunksN 64 (B.append inp rest)
 
 -- extend 16*32bit words to 80*32bit words
@@ -53,13 +53,12 @@ extend x =
 
 doExtend :: Int -> [Word32] -> [Word32]
 doExtend 80 ws = ws
-doExtend i ws =
-    if i >= 0 && i < 16
-        then doExtend (i+1) ws
-    else if i >= 16 && i < 80
-        then let w = (ws!!(i-3) `xor` ws!!(i-8) `xor` ws!!(i-14) `xor` ws!!(i-16)) `rotateL` 1
-             in doExtend (i+1) (ws ++ [w])
-    else error "invalid index i"
+doExtend i ws
+    | i >= 0 && i < 16  = doExtend (i+1) ws
+    | i >= 16 && i < 80 =
+        let w = (ws!!(i-3) `xor` ws!!(i-8) `xor` ws!!(i-14) `xor` ws!!(i-16)) `rotateL` 1
+        in doExtend (i+1) (ws ++ [w])
+    | otherwise         = error "invalid index i"
 
 doMainLoop :: HTuple -> [Word32] -> Int -> HTuple
 doMainLoop hTuple _ 80 = hTuple
@@ -73,7 +72,7 @@ doMainLoop (a,b,c,d,e) w i =
                 a'   = temp
             in (a',b',c',d',e')
     in if 0 <= i && i <= 19
-            then doMainLoop (final ((b .&. c) .|. ((bitNot b) .&. d)) 0x5A827999) w (i+1)
+            then doMainLoop (final ((b .&. c) .|. (bitNot b .&. d)) 0x5A827999) w (i+1)
         else if 20 <= i && i <= 39
             then doMainLoop (final (b `xor` c `xor` d) 0x6ED9EBA1) w (i+1)
         else if 40 <= i && i <= 59
@@ -102,7 +101,7 @@ shaOne :: Bs -> Bs
 shaOne inp =
     let hs = (0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0) :: HTuple
         (h0,h1,h2,h3,h4) = shaOneOnChunkS hs (preProcess inp)
-    in B.concat $ map encode (h0:h1:h2:h3:h4:[])
+    in B.concat $ map encode [h0, h1, h2, h3, h4]
 
 shaOneB64 :: Bs -> String
 shaOneB64 = C8.unpack . B64.encode . shaOne
@@ -112,11 +111,18 @@ shaOneHex = C8.unpack . B16.encode . shaOne
 
 shaOneHmac :: Bs -> Bs -> Bs
 shaOneHmac key msg =
-    if B.length key /= (fromIntegral sz) then error "bad key"
+    if B.length key /= fromIntegral sz then error "bad key"
     else shaOne (oKeyPad `B.append` shaOne (iKeyPad `B.append` msg))
     where
         sz = 20 -- shaOne is 160 bits or 20 bytes
         oKeyPad = B.map (xor 0x5c) key
         iKeyPad = B.map (xor 0x36) key
 
+shaOneCheck :: Bool
+shaOneCheck =
+    shaOne (C8.pack $ replicate 1000000 'a')
+    == B.pack [0x34, 0xaa, 0x97, 0x3c, 0xd4, 0xc4, 0xda, 0xa4, 0xf6, 0x1e, 0xeb, 0x2b, 0xdb, 0xad, 0x27, 0x31, 0x65, 0x34, 0x01, 0x6f]
+    &&
+    shaOne (C8.pack "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")
+    == B.pack [0xa4, 0x9b, 0x24, 0x46, 0xa0, 0x2c, 0x64, 0x5b, 0xf4, 0x19, 0xf9, 0x95, 0xb6, 0x70, 0x91, 0x25, 0x3a, 0x04, 0xa2, 0x59]
 
